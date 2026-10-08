@@ -185,7 +185,9 @@ function DatasetPickerSkeleton() {
   );
 }
 
-export default function Home() {
+export const instant = false;
+
+export default async function Home() {
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
       {/* Backdrop */}

@@ -15,12 +15,13 @@ export interface Profile {
   createdAt: ISODateString;
 }
 
-/** Admin-managed allowlist: only listed emails may sign in. */
-export interface AllowedEmail {
+/** A user account as shown on /admin/users. */
+export interface ManagedUser {
+  id: string;
   email: string;
   role: Role;
-  addedBy: string | null;
   createdAt: ISODateString;
+  lastSignInAt: ISODateString | null;
 }
 
 export type DatasetStatus = "active" | "exported" | "archived";

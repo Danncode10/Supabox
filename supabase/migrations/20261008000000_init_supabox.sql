@@ -1,19 +1,18 @@
 -- Supabox initial schema: tables, indexes, RLS, helper functions, storage.
--- Do not apply automatically; run via `supabase db push` (see docs/SETUP.md).
+-- Apply with `npx supabase db push` or paste into the SQL editor (see README.md).
+--
+-- Auth model (same as DannFlow): every auth user gets a row in public.profiles
+-- via a trigger, with role 'labeler'. Promote someone by setting
+-- profiles.role = 'admin' (Table Editor or SQL). Users are created by an admin,
+-- either in the Supabase dashboard (Authentication > Users > Add user) or in-app
+-- at /admin/users. Public sign-up should be disabled in the dashboard.
 
 create extension if not exists pgcrypto;
 
 -- ---------------------------------------------------------------- tables
-create table public.allowed_emails (
-  email      text primary key check (email = lower(email)),
-  role       text not null default 'labeler' check (role in ('admin','labeler')),
-  added_by   uuid references auth.users(id) on delete set null,
-  created_at timestamptz not null default now()
-);
-
 create table public.profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
-  email        text not null unique check (email = lower(email)),
+  email        text unique check (email = lower(email)),
   display_name text,
   role         text not null default 'labeler' check (role in ('admin','labeler')),
   created_at   timestamptz not null default now()
@@ -74,22 +73,16 @@ create index annotations_class_idx     on public.annotations (class_id);
 create index classes_dataset_idx       on public.classes (dataset_id);
 
 -- ---------------------------------------------------------------- helpers
--- Caller has a profile AND is still on the allowlist.
+-- Caller has a profile (every user created by an admin gets one).
 create or replace function public.is_member()
 returns boolean language sql stable security definer set search_path = '' as $$
-  select exists (
-    select 1 from public.profiles p
-    join public.allowed_emails a on a.email = p.email
-    where p.id = (select auth.uid())
-  );
+  select exists (select 1 from public.profiles p where p.id = (select auth.uid()));
 $$;
 
 create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (
-    select 1 from public.profiles p
-    join public.allowed_emails a on a.email = p.email
-    where p.id = (select auth.uid()) and p.role = 'admin' and a.role = 'admin'
+    select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'
   );
 $$;
 
@@ -101,28 +94,13 @@ $$;
 revoke all on function public.is_member(), public.is_admin(), public.current_user_role() from public, anon;
 grant execute on function public.is_member(), public.is_admin(), public.current_user_role() to authenticated;
 
--- ------------------------------------------------ allowlist enforcement
--- Block account creation for emails not on the allowlist.
-create or replace function public.enforce_allowlist()
-returns trigger language plpgsql security definer set search_path = '' as $$
-begin
-  if not exists (select 1 from public.allowed_emails where email = lower(new.email)) then
-    raise exception 'Email is not allowed to sign in' using errcode = 'P0001';
-  end if;
-  return new;
-end $$;
-
-create trigger enforce_allowlist_before_insert
-  before insert on auth.users
-  for each row execute function public.enforce_allowlist();
-
--- Create profile with allowlist role on first sign-in.
+-- ------------------------------------------------------ profile creation
+-- Create a 'labeler' profile for every new auth user.
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
-  insert into public.profiles (id, email, role)
-  select new.id, lower(new.email), a.role
-  from public.allowed_emails a where a.email = lower(new.email)
+  insert into public.profiles (id, email)
+  values (new.id, lower(new.email))
   on conflict (id) do nothing;
   return new;
 end $$;
@@ -131,7 +109,12 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
-revoke all on function public.enforce_allowlist(), public.handle_new_user() from public, anon, authenticated;
+-- Backfill users that already existed before this migration.
+insert into public.profiles (id, email)
+select u.id, lower(u.email) from auth.users u
+on conflict (id) do nothing;
+
+revoke all on function public.handle_new_user() from public, anon, authenticated;
 
 -- Labelers may only change status / labeled_by / labeled_at on images.
 create or replace function public.guard_image_update()
@@ -151,32 +134,15 @@ create trigger guard_image_update_trg
   before update on public.images
   for each row execute function public.guard_image_update();
 
--- Keep profile role in sync when admin changes allowlist role.
-create or replace function public.sync_profile_role()
-returns trigger language plpgsql security definer set search_path = '' as $$
-begin
-  update public.profiles set role = new.role where email = new.email;
-  return new;
-end $$;
-
-create trigger sync_profile_role_trg
-  after update of role on public.allowed_emails
-  for each row execute function public.sync_profile_role();
-
 -- ------------------------------------------------------------- RLS: tables
-alter table public.allowed_emails enable row level security;
 alter table public.profiles       enable row level security;
 alter table public.datasets       enable row level security;
 alter table public.classes        enable row level security;
 alter table public.images         enable row level security;
 alter table public.annotations    enable row level security;
 
--- allowed_emails: admin only
-create policy allowed_emails_admin_all on public.allowed_emails
-  for all to authenticated
-  using ((select public.is_admin())) with check ((select public.is_admin()));
-
--- profiles: members read all (labeled_by display); self may edit display_name only; admin edits all
+-- profiles: members read all (labeled_by display); self may edit display_name only
+-- (role must stay the same, so nobody can promote themselves); admin edits all
 create policy profiles_select on public.profiles
   for select to authenticated
   using ((select public.is_member()) or id = (select auth.uid()));

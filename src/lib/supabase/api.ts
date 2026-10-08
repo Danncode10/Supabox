@@ -19,14 +19,13 @@ export type AuthContext = {
   role: Role;
 };
 
-/** Returns the signed-in allowlisted user, or a Response (401/403) to return directly. */
+/** Returns the signed-in user with a profile, or a Response (401/403) to return directly. */
 export async function requireUser(): Promise<AuthContext | Response> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return fail(401, "unauthenticated", "Sign in required");
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  const { data: member } = await supabase.rpc("is_member");
-  if (!profile || !member) return fail(403, "forbidden", "Account is not allowed");
+  if (!profile) return fail(403, "forbidden", "Account has no profile");
   return { supabase, userId: user.id, email: user.email ?? "", role: profile.role as Role };
 }
 
