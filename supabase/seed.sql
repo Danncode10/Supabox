@@ -1,0 +1,3 @@
+-- Bootstrap the first admin. Replace the email, then run once in the SQL editor
+-- (or `supabase db reset` locally). That person can then sign in and add others.
+-- insert into public.allowed_emails (email, role) values ('you@example.com', 'admin');
