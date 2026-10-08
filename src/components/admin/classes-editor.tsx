@@ -3,18 +3,26 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { ClassDef } from "@/lib/types";
-import { btnDanger, btnGhost, btnPrimary, card, input, label } from "./ui";
+import { Plus, RefreshCw, Tags, Trash2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const PALETTE = ["#ff5a5f", "#2f80ed", "#27ae60", "#f2994a", "#9b51e0", "#00b8d9", "#eb5757", "#8d6e63"];
 
 export function ClassesEditor({ datasetId }: { datasetId: string }) {
   const [classes, setClasses] = useState<ClassDef[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const { data, error } = await createClient()
       .from("classes").select("id, dataset_id, name, idx, color").eq("dataset_id", datasetId).order("idx");
+    setLoaded(true);
     if (error) return setErr(error.message);
     setClasses(data.map((c) => ({ id: c.id, datasetId: c.dataset_id, name: c.name, index: c.idx, color: c.color })));
   }, [datasetId]);
@@ -54,31 +62,65 @@ export function ClassesEditor({ datasetId }: { datasetId: string }) {
   }
 
   return (
-    <section className={`${card} space-y-3`} aria-labelledby="cl-h">
-      <h2 id="cl-h" className="text-lg font-semibold">Classes</h2>
-      <ul className="space-y-2">
-        {classes.map((c) => (
-          <li key={c.id} className="flex items-center gap-2">
-            <span className="w-6 text-right text-sm text-zinc-500">{c.index}</span>
-            <span className="size-5 shrink-0 rounded-full" style={{ background: c.color }} aria-hidden />
-            <input
-              aria-label={`Class ${c.index} name`} className={input} defaultValue={c.name}
-              onBlur={(e) => rename(c, e.target.value)}
-            />
-            <button className={btnDanger} onClick={() => remove(c)} aria-label={`Delete ${c.name}`}>Delete</button>
-          </li>
-        ))}
-        {classes.length === 0 && <li className="text-sm text-zinc-500">No classes yet.</li>}
-      </ul>
-      <form onSubmit={add} className="flex gap-2">
-        <div className="flex-1">
-          <label htmlFor="cl-name" className={label}>New class</label>
-          <input id="cl-name" className={input} value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <button className={`${btnPrimary} self-end`} disabled={!name.trim()}>Add</button>
-      </form>
-      {err && <p role="alert" className="text-sm text-red-600">{err}</p>}
-      <button className={btnGhost} onClick={() => void load()}>Refresh</button>
-    </section>
+    <Card aria-labelledby="cl-h" role="region">
+      <CardHeader>
+        <CardTitle><h2 id="cl-h">Classes</h2></CardTitle>
+        <CardDescription>Index order becomes the YOLO class id. Rename inline; changes save on blur.</CardDescription>
+        <CardAction>
+          <Button variant="ghost" size="icon" className="size-12 md:size-10" onClick={() => void load()} aria-label="Refresh classes">
+            <RefreshCw aria-hidden />
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {!loaded && (
+          <div className="flex flex-col gap-2" aria-busy>
+            {[0, 1, 2].map((i) => <Skeleton key={i} className="h-11 rounded-lg" />)}
+          </div>
+        )}
+        {loaded && classes.length === 0 && (
+          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-8 text-center">
+            <Tags className="size-6 text-muted-foreground" aria-hidden />
+            <p className="text-sm font-medium">No classes yet</p>
+            <p className="text-sm text-muted-foreground">Add at least one class before labeling.</p>
+          </div>
+        )}
+        {classes.length > 0 && (
+          <ul className="flex flex-col gap-2">
+            {classes.map((c) => (
+              <li key={c.id} className="flex items-center gap-2">
+                <span className="w-6 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">{c.index}</span>
+                <span className="size-4 shrink-0 rounded-full ring-2 ring-border" style={{ background: c.color }} aria-hidden />
+                <Input
+                  aria-label={`Class ${c.index} name`} className="min-w-0 flex-1" defaultValue={c.name}
+                  onBlur={(e) => rename(c, e.target.value)}
+                />
+                <Button
+                  variant="ghost" size="icon"
+                  className="size-12 shrink-0 text-muted-foreground hover:bg-danger/14 hover:text-danger md:size-10"
+                  onClick={() => remove(c)} aria-label={`Delete ${c.name}`}
+                >
+                  <Trash2 aria-hidden />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form onSubmit={add} className="flex items-end gap-2 border-t border-border pt-4">
+          <Field label="New class" htmlFor="cl-name" className="flex-1">
+            <Input id="cl-name" placeholder="e.g. car" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Button size="lg" className="md:h-10" disabled={!name.trim()}>
+            <Plus aria-hidden />
+            Add
+          </Button>
+        </form>
+        {err && (
+          <Alert variant="danger">
+            <AlertDescription>{err}</AlertDescription>
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
   );
 }

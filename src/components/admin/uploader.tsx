@@ -1,10 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { CheckCircle2, CircleDashed, ImagePlus, Loader2, Upload, XCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { IMAGE_BUCKET } from "@/lib/types";
 import type { UploadUrl } from "@/app/api/admin/upload-urls/route";
-import { api, btnPrimary, card, fmtBytes, input, label } from "./ui";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { BorderBeam } from "@/components/ui/border-beam";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
+import { api, fmtBytes } from "./ui";
 
 type Item = { name: string; state: "queued" | "uploading" | "done" | "error"; note?: string };
 const BATCH = 20;
@@ -39,9 +46,19 @@ export function Uploader({ datasetId, onUploaded }: { datasetId: string; onUploa
   const [items, setItems] = useState<Item[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   const patch = (i: number, p: Partial<Item>) => setItems((cur) => cur.map((it, idx) => (idx === i ? { ...it, ...p } : it)));
   const doneCount = items.filter((i) => i.state === "done").length;
+  const totalBytes = files.reduce((n, f) => n + f.size, 0);
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    if (busy) return;
+    const dropped = Array.from(e.dataTransfer.files).filter((f) => /^image\/(jpeg|png|webp)$/.test(f.type));
+    if (dropped.length) setFiles(dropped);
+  }
 
   async function start() {
     setBusy(true);
@@ -98,39 +115,88 @@ export function Uploader({ datasetId, onUploaded }: { datasetId: string; onUploa
     onUploaded();
   }
 
+  const stateIcon = {
+    queued: <CircleDashed className="size-4 text-muted-foreground" aria-hidden />,
+    uploading: <Loader2 className="size-4 animate-spin text-primary" aria-hidden />,
+    done: <CheckCircle2 className="size-4 text-success" aria-hidden />,
+    error: <XCircle className="size-4 text-danger" aria-hidden />,
+  } as const;
+
   return (
-    <section className={`${card} space-y-3`} aria-labelledby="up-h">
-      <h2 id="up-h" className="text-lg font-semibold">Upload images</h2>
-      <div>
-        <label htmlFor="up-files" className={label}>Choose images</label>
-        <input
-          id="up-files" type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy}
-          className={input} onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-        />
-      </div>
-      <label className="flex min-h-12 items-center gap-3 text-sm">
-        <input type="checkbox" className="size-5" checked={compress} onChange={(e) => setCompress(e.target.checked)} disabled={busy} />
-        Compress to max {MAX_SIDE}px JPEG (recommended for the 1 GB free tier)
-      </label>
-      <button className={`${btnPrimary} w-full`} disabled={busy || files.length === 0} onClick={start}>
-        {busy ? `Uploading ${doneCount}/${items.length}...` : `Upload ${files.length || ""} image${files.length === 1 ? "" : "s"}`}
-      </button>
-      {err && <p role="alert" className="text-sm text-red-600">{err}</p>}
-      {items.length > 0 && (
-        <>
-          <div role="progressbar" aria-label="Upload progress" aria-valuemin={0} aria-valuemax={items.length} aria-valuenow={doneCount}
-            className="h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-            <div className="h-full bg-emerald-600" style={{ width: `${(doneCount / items.length) * 100}%` }} />
+    <Card className="relative overflow-hidden" aria-labelledby="up-h" role="region">
+      <CardHeader>
+        <CardTitle><h2 id="up-h">Upload images</h2></CardTitle>
+        <CardDescription>JPEG, PNG or WebP. Files are uploaded in batches of {BATCH}.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <label
+          htmlFor="up-files"
+          onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          className={cn(
+            "flex min-h-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-input bg-background/40 px-4 py-8 text-center transition-[border-color,background-color] duration-150 ease-out-strong focus-within:ring-[3px] focus-within:ring-ring hover:border-primary/60 hover:bg-primary/5",
+            dragging && "border-primary bg-primary/10",
+            busy && "pointer-events-none opacity-60",
+          )}
+        >
+          <span className="grid size-11 place-items-center rounded-xl border border-border bg-card text-primary [box-shadow:var(--inset-highlight),var(--elev-sm)]">
+            <ImagePlus className="size-5" aria-hidden />
+          </span>
+          {files.length > 0 ? (
+            <span className="text-sm font-medium">
+              {files.length} image{files.length === 1 ? "" : "s"} selected
+              <span className="ml-2 font-mono text-xs tabular-nums text-muted-foreground">{fmtBytes(totalBytes)}</span>
+            </span>
+          ) : (
+            <span className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium">Choose images or drop them here</span>
+              <span className="text-xs text-muted-foreground">Tap to open your photo library</span>
+            </span>
+          )}
+          <input
+            id="up-files" type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy}
+            className="sr-only" onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+          />
+        </label>
+
+        <label className="flex min-h-12 items-center gap-3 text-sm">
+          <input type="checkbox" className="size-5 shrink-0 accent-primary" checked={compress} onChange={(e) => setCompress(e.target.checked)} disabled={busy} />
+          <span>Compress to max {MAX_SIDE}px JPEG <span className="text-muted-foreground">(recommended for the 1 GB free tier)</span></span>
+        </label>
+
+        <Button size="lg" className="w-full" loading={busy} disabled={files.length === 0} onClick={start}>
+          {!busy && <Upload aria-hidden />}
+          {busy ? `Uploading ${doneCount}/${items.length}...` : `Upload ${files.length || ""} image${files.length === 1 ? "" : "s"}`}
+        </Button>
+
+        {err && (
+          <Alert variant="danger">
+            <AlertDescription>{err}</AlertDescription>
+          </Alert>
+        )}
+
+        {items.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <Progress
+              value={(doneCount / items.length) * 100}
+              aria-label="Upload progress"
+              className="h-2.5"
+              tone={items.some((i) => i.state === "error") && !busy ? "warning" : "primary"}
+            />
+            <ul className="flex max-h-56 flex-col divide-y divide-border overflow-y-auto rounded-lg border border-border text-sm" aria-live="polite">
+              {items.map((it, i) => (
+                <li key={i} className={cn("flex items-center gap-2.5 px-3 py-2", it.state === "error" && "text-danger")}>
+                  {stateIcon[it.state]}
+                  <span className="min-w-0 flex-1 truncate">{it.note ?? it.name}</span>
+                  <span className="shrink-0 text-xs capitalize text-muted-foreground">{it.state}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-          <ul className="max-h-48 space-y-1 overflow-y-auto text-sm" aria-live="polite">
-            {items.map((it, i) => (
-              <li key={i} className={it.state === "error" ? "text-red-600" : ""}>
-                {it.state}: {it.note ?? it.name}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </section>
+        )}
+      </CardContent>
+      {busy && <BorderBeam size={100} duration={6} borderWidth={1.5} />}
+    </Card>
   );
 }

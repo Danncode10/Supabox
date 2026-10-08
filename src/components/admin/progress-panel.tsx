@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { ImageStatus } from "@/lib/types";
-import { btnGhost, card } from "./ui";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { NumberTicker } from "@/components/ui/number-ticker";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Stat } from "@/components/ui/stat";
+import { Images } from "lucide-react";
 
 const STATUSES: ImageStatus[] = ["done", "in_progress", "skipped", "unlabeled"];
 const PAGE = 60;
@@ -40,31 +48,62 @@ export function ProgressPanel({ datasetId, refreshKey }: { datasetId: string; re
   const total = counts ? Object.values(counts).reduce((a, b) => a + b, 0) : 0;
   const pct = total && counts ? (counts.done / total) * 100 : 0;
 
+  const stats: { key: ImageStatus; label: string }[] = [
+    { key: "done", label: "Done" },
+    { key: "in_progress", label: "In progress" },
+    { key: "skipped", label: "Skipped" },
+    { key: "unlabeled", label: "Unlabeled" },
+  ];
+
   return (
-    <section className={`${card} space-y-3`} aria-labelledby="pr-h">
-      <h2 id="pr-h" className="text-lg font-semibold">Label progress</h2>
-      {counts && (
-        <>
-          <div role="progressbar" aria-label="Labeled" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}
-            className="h-3 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-            <div className="h-full bg-emerald-600" style={{ width: `${pct}%` }} />
+    <Card aria-labelledby="pr-h" role="region">
+      <CardHeader>
+        <CardTitle><h2 id="pr-h">Label progress</h2></CardTitle>
+        <CardDescription>
+          {counts ? `${counts.done} of ${total} images labeled (${Math.round(pct)}%)` : "Counting images..."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        {!counts && (
+          <div className="flex flex-col gap-4" aria-busy>
+            <Skeleton className="h-2.5 rounded-full" />
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14" />)}
+            </div>
           </div>
-          <p className="text-sm">
-            {counts.done}/{total} done, {counts.in_progress} in progress, {counts.skipped} skipped, {counts.unlabeled} unlabeled
-          </p>
-        </>
-      )}
-      <ul className="grid max-h-72 grid-cols-2 gap-1 overflow-y-auto text-sm sm:grid-cols-3">
-        {rows.map((r) => (
-          <li key={r.id} className="flex items-center justify-between gap-2 rounded-lg bg-zinc-100 px-2 py-1 dark:bg-zinc-900">
-            <span className="truncate">{r.name}</span>
-            <span className={r.status === "done" ? "text-emerald-600" : r.status === "skipped" ? "text-amber-600" : "text-zinc-500"}>
-              {r.status === "in_progress" ? "wip" : r.status}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {more && <button className={btnGhost} onClick={() => loadPage(rows.length)}>Load more</button>}
-    </section>
+        )}
+        {counts && (
+          <>
+            <Progress value={pct} tone="success" aria-label="Labeled" className="h-2.5" />
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {stats.map((st) => (
+                <Stat
+                  key={st.key}
+                  label={st.label}
+                  value={<NumberTicker value={counts[st.key]} className="text-2xl" />}
+                />
+              ))}
+            </div>
+          </>
+        )}
+        {counts && rows.length === 0 ? (
+          <EmptyState icon={<Images />} title="No images yet" description="Upload images above to start labeling." className="py-8" />
+        ) : (
+          rows.length > 0 && (
+            <ul className="grid max-h-72 grid-cols-1 gap-px overflow-y-auto rounded-lg border border-border bg-border text-sm sm:grid-cols-2 lg:grid-cols-3">
+              {rows.map((r) => (
+                <li key={r.id} className="flex min-h-10 items-center justify-between gap-2 bg-card px-3 py-2">
+                  <span className="truncate font-mono text-xs">{r.name}</span>
+                  <Badge variant={r.status === "done" ? "success" : r.status === "skipped" ? "warning" : r.status === "in_progress" ? "info" : "neutral"}>
+                    {r.status === "in_progress" ? "wip" : r.status}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )
+        )}
+        {more && <Button variant="outline" size="lg" className="w-full" onClick={() => loadPage(rows.length)}>Load more</Button>}
+      </CardContent>
+    </Card>
   );
 }

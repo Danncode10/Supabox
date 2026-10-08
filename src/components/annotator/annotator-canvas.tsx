@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Minus, Plus } from "lucide-react";
 import type { ClassDef, DraftBox } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { FALLBACK_COLOR, contrastText } from "./class-color";
 import {
   MAX_SCALE,
   MIN_DRAW_PX,
@@ -42,7 +45,6 @@ type Gesture =
 
 const HANDLES: Handle[] = ["tl", "tr", "bl", "br"];
 const HIT = 44; // px, handle hit area
-const FALLBACK = "#888888";
 
 export function AnnotatorCanvas(p: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -188,7 +190,7 @@ export function AnnotatorCanvas(p: Props) {
     }
   };
 
-  const classColor = (id: string) => p.classes.find((c) => c.id === id)?.color ?? FALLBACK;
+  const classColor = (id: string) => p.classes.find((c) => c.id === id)?.color ?? FALLBACK_COLOR;
   const className = (id: string) => p.classes.find((c) => c.id === id)?.name ?? "?";
   const sel = p.selectedId;
   const ordered = useMemo(
@@ -201,14 +203,14 @@ export function AnnotatorCanvas(p: Props) {
     return { left: a.x, top: a.y, width: b.x - a.x, height: b.y - a.y };
   };
   const zoomBtn =
-    "flex h-12 w-12 items-center justify-center rounded-full border border-foreground/20 bg-background text-xl text-foreground shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground";
+    "grid h-11 w-11 place-items-center font-mono text-xs font-medium tabular-nums text-foreground outline-none transition-[background-color,opacity] duration-150 hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring active:bg-accent disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4";
 
   return (
     <div
       ref={ref}
       role="application"
       aria-label={`Annotation canvas for ${p.imageLabel}. Drag on the image to draw a box. Use the box list to edit boxes with the keyboard.`}
-      className="relative h-full w-full touch-none select-none overflow-hidden overscroll-contain bg-foreground/10"
+      className="relative h-full w-full touch-none select-none overflow-hidden overscroll-contain bg-muted"
       style={{ touchAction: "none" }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -238,16 +240,28 @@ export function AnnotatorCanvas(p: Props) {
           const r = rectPx({ x1: b.x - b.w / 2, y1: b.y - b.h / 2, x2: b.x + b.w / 2, y2: b.y + b.h / 2 });
           const color = classColor(b.classId);
           const selected = b.id === sel;
+          // Keep the chip readable when the box touches the top edge of the canvas.
+          const chipInside = r.top < 26;
           return (
             <div
               key={b.id}
               data-box-id={b.id}
-              className="absolute cursor-move"
-              style={{ ...r, border: `${selected ? 3 : 2}px solid ${color}`, background: selected ? `${color}22` : "transparent" }}
+              className="absolute cursor-move rounded-[3px]"
+              style={{
+                ...r,
+                border: `${selected ? 3 : 2}px solid ${color}`,
+                background: selected ? `${color}2e` : `${color}14`,
+                boxShadow: selected
+                  ? `0 0 0 1px rgb(0 0 0 / 0.55), 0 0 0 4px ${color}55, 0 0 28px ${color}88`
+                  : "0 0 0 1px rgb(0 0 0 / 0.4)",
+              }}
             >
               <span
-                className="pointer-events-none absolute -top-6 left-[-2px] max-w-40 truncate rounded-sm px-1.5 text-xs font-semibold text-white"
-                style={{ background: color }}
+                className={cn(
+                  "pointer-events-none absolute left-[-2px] flex max-w-40 items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-[11px] font-semibold leading-none shadow-sm",
+                  chipInside ? "top-0 rounded-tl-none" : "-top-6",
+                )}
+                style={{ background: color, color: contrastText(color) }}
               >
                 {className(b.classId)}
               </span>
@@ -266,24 +280,35 @@ export function AnnotatorCanvas(p: Props) {
                       bottom: h.startsWith("b") ? -HIT / 2 : undefined,
                     }}
                   >
-                    <span className="pointer-events-none block h-4 w-4 rounded-full border-2 bg-background" style={{ borderColor: color }} />
+                    <span
+                      className="pointer-events-none block size-5 rounded-full border-[3px] bg-background"
+                      style={{ borderColor: color, boxShadow: "0 0 0 1.5px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.45)" }}
+                    />
                   </div>
                 ))}
             </div>
           );
         })}
 
-      {draft && <div className="pointer-events-none absolute border-2 border-dashed border-foreground bg-foreground/10" style={rectPx(draft)} />}
+      {draft && (
+        <div
+          className="pointer-events-none absolute rounded-[3px] border-2 border-dashed border-primary bg-primary/12 [box-shadow:0_0_0_1px_rgb(0_0_0/0.45)]"
+          style={rectPx(draft)}
+        />
+      )}
 
-      <div className="absolute bottom-3 right-3 flex flex-col gap-2" onPointerDown={(e) => e.stopPropagation()}>
+      <div
+        className="absolute bottom-3 right-3 flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-popover/75 backdrop-blur-xl [box-shadow:var(--inset-highlight),var(--elev-md)]"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
         <button type="button" aria-label="Zoom in" className={zoomBtn} onClick={() => zoomAt(1.5, size.w / 2, size.h / 2)}>
-          +
+          <Plus aria-hidden="true" />
         </button>
         <button type="button" aria-label="Zoom out" className={zoomBtn} onClick={() => zoomAt(1 / 1.5, size.w / 2, size.h / 2)}>
-          &minus;
+          <Minus aria-hidden="true" />
         </button>
-        <button type="button" aria-label="Reset zoom" disabled={view.scale === 1} className={`${zoomBtn} text-sm disabled:opacity-40`} onClick={() => setView({ scale: 1, tx: 0, ty: 0 })}>
-          1x
+        <button type="button" aria-label="Reset zoom" disabled={view.scale === 1} className={zoomBtn} onClick={() => setView({ scale: 1, tx: 0, ty: 0 })}>
+          {view.scale.toFixed(1).replace(/\.0$/, "")}x
         </button>
       </div>
     </div>

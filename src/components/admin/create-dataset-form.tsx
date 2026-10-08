@@ -2,8 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { btnPrimary, card, input, label } from "./ui";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
 export function CreateDatasetForm() {
   const router = useRouter();
@@ -30,24 +35,35 @@ export function CreateDatasetForm() {
   }
 
   return (
-    <form onSubmit={submit} className={`${card} space-y-3`}>
-      <h2 className="text-lg font-semibold">New dataset</h2>
-      <div>
-        <label htmlFor="ds-name" className={label}>Name</label>
-        <input id="ds-name" required className={input} value={name} onChange={(e) => setName(e.target.value)} />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="ds-prefix" className={label}>Image prefix</label>
-          <input id="ds-prefix" required pattern="[A-Za-z0-9_\-]+" className={input} value={prefix} onChange={(e) => setPrefix(e.target.value)} />
-        </div>
-        <div>
-          <label htmlFor="ds-start" className={label}>Start number</label>
-          <input id="ds-start" type="number" min={0} inputMode="numeric" required className={input} value={start} onChange={(e) => setStart(Number(e.target.value))} />
-        </div>
-      </div>
-      {err && <p role="alert" className="text-sm text-red-600">{err}</p>}
-      <button className={`${btnPrimary} w-full`} disabled={busy || !name.trim()}>{busy ? "Creating..." : "Create dataset"}</button>
-    </form>
+    <Card>
+      <CardHeader>
+        <CardTitle><h2>New dataset</h2></CardTitle>
+        <CardDescription>Images are named prefix_0001, prefix_0002 and so on.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={submit} className="flex flex-col gap-4">
+          <Field label="Name" htmlFor="ds-name">
+            <Input id="ds-name" required placeholder="Street signs" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Image prefix" htmlFor="ds-prefix">
+              <Input id="ds-prefix" required pattern="[A-Za-z0-9_\-]+" value={prefix} onChange={(e) => setPrefix(e.target.value)} />
+            </Field>
+            <Field label="Start number" htmlFor="ds-start">
+              <Input id="ds-start" type="number" min={0} inputMode="numeric" required value={start} onChange={(e) => setStart(Number(e.target.value))} />
+            </Field>
+          </div>
+          {err && (
+            <Alert variant="danger">
+              <AlertDescription>{err}</AlertDescription>
+            </Alert>
+          )}
+          <Button size="lg" loading={busy} disabled={!name.trim()} className="w-full">
+            {!busy && <Plus aria-hidden />}
+            {busy ? "Creating..." : "Create dataset"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

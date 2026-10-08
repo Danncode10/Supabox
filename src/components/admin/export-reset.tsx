@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { api, btnDanger, btnGhost, btnPrimary, card, input, label } from "./ui";
+import { AlertTriangle, Download, RefreshCw } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { api } from "./ui";
 
 export function ExportReset({
   datasetId, datasetName, lastExportedAt, onChanged,
@@ -36,48 +43,76 @@ export function ExportReset({
   }
 
   return (
-    <section className={`${card} space-y-4`} aria-labelledby="ex-h">
-      <h2 id="ex-h" className="text-lg font-semibold">Export and reset</h2>
-      <div className="space-y-2">
-        <p className="text-sm text-zinc-500">
-          Downloads a YOLOv8 ZIP with all images marked done.{" "}
-          {exported ? `Last exported ${new Date(lastExportedAt).toLocaleString()}.` : "Not exported yet."}
-        </p>
-        <a href={`/api/export/${datasetId}`} download className={`${btnPrimary} w-full`} onClick={() => setTimeout(onChanged, 15000)}>
-          Export YOLOv8 ZIP
-        </a>
-        <button className={btnGhost} onClick={onChanged}>Refresh status</button>
-      </div>
+    <div className="flex flex-col gap-6">
+      <Card aria-labelledby="ex-h" role="region">
+        <CardHeader>
+          <CardTitle><h2 id="ex-h">Export</h2></CardTitle>
+          <CardDescription>Downloads a YOLOv8 ZIP with all images marked done.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <Badge variant={exported ? "success" : "neutral"} dot className="self-start">
+            {exported ? `Last exported ${new Date(lastExportedAt).toLocaleString()}` : "Not exported yet"}
+          </Badge>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button asChild size="lg" className="w-full sm:w-auto">
+              <a href={`/api/export/${datasetId}`} download onClick={() => setTimeout(onChanged, 15000)}>
+                <Download aria-hidden />
+                Export YOLOv8 ZIP
+              </a>
+            </Button>
+            <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={onChanged}>
+              <RefreshCw aria-hidden />
+              Refresh status
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-      <div className="space-y-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-        <h3 className="font-medium text-red-600">Reset dataset</h3>
-        <p className="text-sm">
-          Deletes all images, boxes and stored files to free space. Make sure the export finished downloading first.
-        </p>
-        {!exported && (
+      <Card aria-labelledby="rs-h" role="region" className="border-danger/40 bg-danger/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-danger">
+            <AlertTriangle className="size-4" aria-hidden />
+            <h2 id="rs-h">Danger zone: reset dataset</h2>
+          </CardTitle>
+          <CardDescription>
+            Deletes all images, boxes and stored files to free space. Make sure the export finished downloading first.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {!exported && (
+            <label className="flex min-h-12 items-center gap-3 text-sm">
+              <input type="checkbox" className="size-5 shrink-0 accent-danger" checked={force} onChange={(e) => setForce(e.target.checked)} />
+              Override: reset without exporting
+            </label>
+          )}
           <label className="flex min-h-12 items-center gap-3 text-sm">
-            <input type="checkbox" className="size-5" checked={force} onChange={(e) => setForce(e.target.checked)} />
-            Override: reset without exporting
+            <input type="checkbox" className="size-5 shrink-0 accent-danger" checked={deleteClasses} onChange={(e) => setDeleteClasses(e.target.checked)} />
+            Also delete classes
           </label>
-        )}
-        <label className="flex min-h-12 items-center gap-3 text-sm">
-          <input type="checkbox" className="size-5" checked={deleteClasses} onChange={(e) => setDeleteClasses(e.target.checked)} />
-          Also delete classes
-        </label>
-        <div>
-          <label htmlFor="rs-start" className={label}>New start number (optional)</label>
-          <input id="rs-start" type="number" min={0} inputMode="numeric" className={input} value={newStart} onChange={(e) => setNewStart(e.target.value)} />
-        </div>
-        <div>
-          <label htmlFor="rs-confirm" className={label}>Type <strong>{datasetName}</strong> to confirm</label>
-          <input id="rs-confirm" autoComplete="off" className={input} value={typed} onChange={(e) => setTyped(e.target.value)} />
-        </div>
-        <button className={`${btnDanger} w-full`} disabled={!canReset || busy} onClick={reset}>
-          {busy ? "Resetting..." : "Reset dataset"}
-        </button>
-        {msg && <p role="status" className="text-sm text-emerald-600">{msg}</p>}
-        {err && <p role="alert" className="text-sm text-red-600">{err}</p>}
-      </div>
-    </section>
+          <Field label="New start number (optional)" htmlFor="rs-start">
+            <Input id="rs-start" type="number" min={0} inputMode="numeric" value={newStart} onChange={(e) => setNewStart(e.target.value)} />
+          </Field>
+          <Field
+            label={<>Type <strong className="font-semibold">{datasetName}</strong> to confirm</>}
+            htmlFor="rs-confirm"
+          >
+            <Input id="rs-confirm" autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} />
+          </Field>
+          <Button variant="destructive" size="lg" className="w-full" loading={busy} disabled={!canReset} onClick={reset}>
+            {busy ? "Resetting..." : "Reset dataset"}
+          </Button>
+          {msg && (
+            <Alert variant="success">
+              <AlertDescription className="text-foreground">{msg}</AlertDescription>
+            </Alert>
+          )}
+          {err && (
+            <Alert variant="danger">
+              <AlertDescription>{err}</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

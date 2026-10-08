@@ -1,6 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { motion } from "motion/react";
+import { ArrowLeft, ArrowRight, ChevronUp, Check, ImageOff, ListChecks, Redo2, SkipForward, Trash2, Undo2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Kbd } from "@/components/ui/kbd";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 import type { DraftBox, ImageRecord, ImageStatus } from "@/lib/types";
 import type { AnnotatorAdapter, AnnotatorSession, LoadedImage } from "./adapter";
 import { AnnotatorCanvas } from "./annotator-canvas";
@@ -8,7 +18,9 @@ import { BottomSheet } from "./bottom-sheet";
 import { BoxList } from "./box-list";
 import { ClassPicker } from "./class-picker";
 import { moveBox } from "./geometry";
-import { useAutosave, type SaveState } from "./use-autosave";
+import { ProgressRing } from "./progress-ring";
+import { SaveStatus } from "./save-status";
+import { useAutosave } from "./use-autosave";
 import { useBoxHistory } from "./use-box-history";
 
 interface Props {
@@ -18,9 +30,36 @@ interface Props {
   backHref?: string;
 }
 
-const ring = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground";
-const btn = `flex h-12 min-w-12 items-center justify-center rounded-lg border border-foreground/20 px-3 text-sm font-medium disabled:opacity-40 ${ring}`;
-const SAVE_TEXT: Record<SaveState, string> = { idle: "", saving: "Saving...", saved: "Saved", error: "Save failed, retrying" };
+const STATUS_BADGE: Record<ImageStatus, { label: string; variant: "neutral" | "info" | "success" | "warning" }> = {
+  unlabeled: { label: "Unlabeled", variant: "neutral" },
+  in_progress: { label: "In progress", variant: "info" },
+  done: { label: "Done", variant: "success" },
+  skipped: { label: "Skipped", variant: "warning" },
+};
+
+const SHORTCUTS: [string, string][] = [
+  ["1-9", "Pick class"],
+  ["C", "Class list"],
+  ["B", "Box list"],
+  ["Del", "Delete box"],
+  ["Ctrl Z", "Undo"],
+  ["Arrows", "Nudge / switch image"],
+  ["[ ]", "Previous / next"],
+  ["D", "Done"],
+  ["S", "Skip"],
+];
+
+const toolBase =
+  "flex h-12 min-w-12 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl px-2 text-[10px] font-medium leading-none text-muted-foreground outline-none transition-[transform,background-color,color] duration-150 ease-out-strong hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35 aria-expanded:bg-accent aria-expanded:text-foreground [&_svg]:size-[18px] [&_svg]:shrink-0";
+
+function ToolButton({ icon, label, className, ...props }: { icon: React.ReactNode; label: string } & React.ComponentProps<"button">) {
+  return (
+    <button type="button" className={cn(toolBase, className)} {...props}>
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
 
 export function Annotator({ datasetId, adapter, initialImageId, backHref }: Props) {
   const [session, setSession] = useState<AnnotatorSession | null>(null);
@@ -195,39 +234,79 @@ export function Annotator({ datasetId, adapter, initialImageId, backHref }: Prop
   const activeClass = classes.find((c) => c.id === (state.boxes.find((b) => b.id === state.selectedId)?.classId ?? activeClassId));
   const doneCount = images.filter((i) => i.status === "done" || i.status === "skipped").length;
 
-  if (!session && !error) return <p className="p-6 text-foreground" role="status">Loading dataset...</p>;
-  if (!session) return <p className="p-6 text-foreground" role="alert">{error}</p>;
-  if (!images.length) return <p className="p-6 text-foreground">This dataset has no images yet.</p>;
+  if (!session && !error)
+    return (
+      <div className="flex h-dvh flex-col gap-3 bg-background p-4" role="status" aria-label="Loading dataset">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="min-h-0 w-full flex-1" />
+        <Skeleton className="h-28 w-full rounded-2xl" />
+      </div>
+    );
+  if (!session)
+    return (
+      <div className="grid h-dvh place-items-center bg-background p-4">
+        <Alert variant="danger" className="max-w-md">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  if (!images.length)
+    return (
+      <div className="grid h-dvh place-items-center bg-background p-4">
+        <EmptyState
+          icon={<ImageOff />}
+          title="No images yet"
+          description="This dataset has no images to label."
+          action={
+            backHref ? (
+              <a href={backHref} className={buttonVariants({ variant: "outline" })}>
+                <ArrowLeft /> Back to dataset
+              </a>
+            ) : undefined
+          }
+        />
+      </div>
+    );
+
+  const status = STATUS_BADGE[current?.status ?? "unlabeled"];
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
-      <header className="flex items-center gap-2 border-b border-foreground/20 px-2 pt-[env(safe-area-inset-top)]">
+      <header className="flex items-center gap-2 border-b border-border bg-card/60 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
         {backHref && (
-          <a href={backHref} aria-label="Back to dataset" className={`${btn} border-0`}>
-            &larr;
+          <a href={backHref} aria-label="Back to dataset" className={buttonVariants({ variant: "ghost", size: "icon" })}>
+            <ArrowLeft />
           </a>
         )}
-        <div className="min-w-0 flex-1 py-1">
-          <h1 className="truncate text-sm font-semibold">{current?.name}</h1>
-          <p className="truncate text-xs opacity-70">
-            Image {index + 1} of {images.length} &middot; {doneCount} finished &middot; {current?.status.replace("_", " ")}
-            <span aria-live="polite" className="ml-2">
-              {SAVE_TEXT[autosave.state]}
+        <div className="min-w-0 flex-1 py-1.5">
+          <h1 className="truncate text-sm font-semibold tracking-tight">{current?.name}</h1>
+          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-mono tabular-nums">
+              {index + 1}/{images.length}
             </span>
+            <Badge variant={status.variant} dot pulse={current?.status === "in_progress"} className="py-0 text-[11px]">
+              {status.label}
+            </Badge>
+            <span className="sr-only sm:not-sr-only">{doneCount} finished</span>
           </p>
         </div>
-        <button type="button" className={`${btn} lg:hidden`} onClick={() => setSheet("boxes")} aria-haspopup="dialog">
-          Boxes {state.boxes.length}
-        </button>
+        <SaveStatus state={autosave.state} />
+        <ProgressRing value={doneCount / images.length} />
+        <Button variant="secondary" className="lg:hidden" onClick={() => setSheet("boxes")} aria-haspopup="dialog" aria-label={`Boxes, ${state.boxes.length}`}>
+          <ListChecks />
+          <span className="font-mono tabular-nums">{state.boxes.length}</span>
+        </Button>
       </header>
 
       {error && (
-        <p role="alert" className="flex items-center justify-between gap-2 border-b border-foreground/20 bg-foreground/10 px-3 py-1 text-sm">
-          <span>{error}</span>
-          <button type="button" className={`${btn} border-0`} onClick={() => setError(null)}>
-            Dismiss
-          </button>
-        </p>
+        <Alert variant="danger" className="rounded-none border-x-0 border-t-0 py-2">
+          <AlertDescription className="flex items-center justify-between gap-2 text-foreground">
+            <span>{error}</span>
+            <Button variant="ghost" size="sm" onClick={() => setError(null)}>
+              Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
       <div className="flex min-h-0 flex-1">
@@ -248,11 +327,18 @@ export function Annotator({ datasetId, adapter, initialImageId, backHref }: Prop
               onCreate={createBox}
             />
           ) : (
-            <p className="p-6" role="status">Loading image...</p>
+            <div className="grid h-full place-items-center bg-muted" role="status">
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Spinner /> Loading image...
+              </span>
+            </div>
           )}
         </main>
-        <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto border-l border-foreground/20 px-3 py-2 lg:flex" aria-label="Boxes">
-          <h2 className="text-sm font-semibold">Boxes ({state.boxes.length})</h2>
+        <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto border-l border-border bg-card/40 px-3 py-3 lg:flex" aria-label="Boxes">
+          <h2 className="flex items-center justify-between text-sm font-semibold tracking-tight">
+            Boxes
+            <span className="font-mono text-xs tabular-nums text-muted-foreground">{state.boxes.length}</span>
+          </h2>
           <BoxList
             boxes={state.boxes}
             classes={classes}
@@ -260,43 +346,75 @@ export function Annotator({ datasetId, adapter, initialImageId, backHref }: Prop
             onSelect={(id) => dispatch({ type: "select", id })}
             onDelete={(id) => dispatch({ type: "remove", id })}
           />
-          <p className="mt-auto pt-3 text-xs opacity-70">
-            Keys: 1-9 class, C class list, Del delete, Ctrl+Z undo, arrows nudge or switch image, [ ] prev/next, D done, S skip.
-          </p>
+          <dl className="mt-auto grid gap-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
+            {SHORTCUTS.map(([k, v]) => (
+              <div key={k} className="flex items-center justify-between gap-2">
+                <dt>{v}</dt>
+                <dd>
+                  <Kbd>{k}</Kbd>
+                </dd>
+              </div>
+            ))}
+          </dl>
         </aside>
       </div>
 
-      <footer className="grid gap-2 border-t border-foreground/20 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
-        <div className="flex gap-2">
-          <button type="button" className={btn} aria-label="Undo" disabled={!state.past.length} onClick={() => dispatch({ type: "undo" })}>
-            &#8630;
-          </button>
-          <button type="button" className={btn} aria-label="Redo" disabled={!state.future.length} onClick={() => dispatch({ type: "redo" })}>
-            &#8631;
-          </button>
-          <button type="button" className={btn} aria-label="Delete selected box" disabled={!state.selectedId} onClick={deleteSelected}>
-            &#9003;
-          </button>
-          <button type="button" className={`${btn} flex-1 justify-start gap-2`} onClick={() => setSheet("class")} aria-haspopup="dialog">
-            <span className="h-4 w-4 shrink-0 rounded-full border border-foreground/30" style={{ background: activeClass?.color ?? "transparent" }} aria-hidden="true" />
-            <span className="truncate">{activeClass ? activeClass.name : "Pick class"}</span>
-          </button>
+      <motion.footer
+        initial={{ y: 24, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 380, damping: 34 }}
+        className="px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5"
+      >
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-1 rounded-2xl border border-border bg-popover/70 p-1.5 backdrop-blur-xl [box-shadow:var(--inset-highlight),var(--elev-md)] landscape:flex-row landscape:items-center landscape:gap-2">
+          <div className="flex items-center gap-1 landscape:flex-1">
+            <ToolButton icon={<Undo2 />} label="Undo" title="Undo (Ctrl+Z)" disabled={!state.past.length} onClick={() => dispatch({ type: "undo" })} />
+            <ToolButton icon={<Redo2 />} label="Redo" title="Redo (Ctrl+Shift+Z)" disabled={!state.future.length} onClick={() => dispatch({ type: "redo" })} />
+            <ToolButton
+              icon={<Trash2 />}
+              label="Delete"
+              title="Delete selected box (Del)"
+              aria-label="Delete selected box"
+              className="enabled:text-danger enabled:hover:bg-danger/14 enabled:hover:text-danger"
+              disabled={!state.selectedId}
+              onClick={deleteSelected}
+            />
+            <button
+              type="button"
+              className="ml-1 flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-xl bg-secondary px-3 text-sm font-medium text-secondary-foreground outline-none transition-[transform,background-color] duration-150 ease-out-strong hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring active:scale-[0.97] aria-expanded:bg-accent"
+              onClick={() => setSheet("class")}
+              aria-haspopup="dialog"
+              aria-expanded={sheet === "class"}
+              title="Pick class (C)"
+            >
+              <span
+                className="size-4 shrink-0 rounded-full ring-2 ring-foreground/20"
+                style={{ background: activeClass?.color ?? "transparent" }}
+                aria-hidden="true"
+              />
+              <span className="truncate">{activeClass ? activeClass.name : "Pick class"}</span>
+              <ChevronUp className="ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </button>
+          </div>
+          <div aria-hidden="true" className="hidden h-8 w-px shrink-0 bg-border landscape:block" />
+          <div className="flex items-center gap-1 landscape:flex-1">
+            <ToolButton icon={<ArrowLeft />} label="Prev" aria-label="Previous image" title="Previous image ([)" disabled={index === 0} onClick={() => void go(index - 1)} />
+            <ToolButton icon={<SkipForward />} label="Skip" title="Skip (S)" className="flex-1" disabled={!ready} onClick={() => void finish("skipped")} />
+            <button
+              type="button"
+              disabled={!ready}
+              onClick={() => void finish("done")}
+              title="Mark done (D)"
+              className={cn(
+                buttonVariants({ variant: "default", size: "lg" }),
+                "h-12 flex-[2] rounded-xl",
+              )}
+            >
+              <Check /> Done
+            </button>
+            <ToolButton icon={<ArrowRight />} label="Next" aria-label="Next image" title="Next image (])" disabled={index === images.length - 1} onClick={() => void go(index + 1)} />
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button type="button" className={btn} aria-label="Previous image" disabled={index === 0} onClick={() => void go(index - 1)}>
-            &larr;
-          </button>
-          <button type="button" className={`${btn} flex-1`} disabled={!ready} onClick={() => void finish("skipped")}>
-            Skip
-          </button>
-          <button type="button" className={`${btn} flex-[2] border-foreground bg-foreground text-background`} disabled={!ready} onClick={() => void finish("done")}>
-            Done
-          </button>
-          <button type="button" className={btn} aria-label="Next image" disabled={index === images.length - 1} onClick={() => void go(index + 1)}>
-            &rarr;
-          </button>
-        </div>
-      </footer>
+      </motion.footer>
 
       <BottomSheet open={sheet === "class"} title={state.selectedId ? "Class for selected box" : "Class for new boxes"} onClose={() => setSheet(null)}>
         <ClassPicker classes={classes} activeId={activeClass?.id ?? null} onPick={pickClass} />

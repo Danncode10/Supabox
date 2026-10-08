@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { DatasetAdmin } from "@/components/admin/dataset-admin";
+import { DatasetAdmin, DatasetAdminSkeleton } from "@/components/admin/dataset-admin";
 
 async function Content({ params }: { params: Promise<{ datasetId: string }> }) {
   const { datasetId } = await params;
@@ -8,7 +8,7 @@ async function Content({ params }: { params: Promise<{ datasetId: string }> }) {
 
 export default function AdminDatasetPage({ params }: { params: Promise<{ datasetId: string }> }) {
   return (
-    <Suspense fallback={<p className="text-sm text-zinc-500">Loading...</p>}>
+    <Suspense fallback={<DatasetAdminSkeleton />}>
       <Content params={params} />
     </Suspense>
   );
