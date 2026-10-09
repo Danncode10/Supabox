@@ -32,17 +32,21 @@ export function AdminSidebar() {
   // Refetch on navigation so a newly created dataset appears right away.
   useEffect(() => {
     let live = true;
-    void createClient()
-      .from("datasets")
-      .select("id, name, status")
-      .order("created_at", { ascending: false })
-      .then(({ data, error }) => {
-        if (!live) return;
-        setErr(Boolean(error));
-        if (data) setRows(data as Row[]);
-      });
+    const fetchRows = () =>
+      void createClient()
+        .from("datasets")
+        .select("id, name, status")
+        .order("created_at", { ascending: false })
+        .then(({ data, error }) => {
+          if (!live) return;
+          setErr(Boolean(error));
+          if (data) setRows(data as Row[]);
+        });
+    fetchRows();
+    window.addEventListener("supabox:datasets-changed", fetchRows);
     return () => {
       live = false;
+      window.removeEventListener("supabox:datasets-changed", fetchRows);
     };
   }, [pathname]);
 

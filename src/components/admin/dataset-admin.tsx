@@ -19,6 +19,7 @@ import { statusVariant, WORKSPACE_TABS, type WorkspaceTab } from "./dataset-stat
 import { ExportPanel } from "./export-panel";
 import { ImageGallery, type StatusCounts } from "./image-gallery";
 import { NamingEditor } from "./naming-editor";
+import { RenameDatasetPanel } from "./rename-dataset-panel";
 import { ResetPanel } from "./reset-panel";
 import { TestPanel } from "./test-panel";
 import { UploadDropzone, UploadNote, UploadQueue } from "./uploader";
@@ -382,6 +383,7 @@ export function DatasetAdmin({
         </TabsContent>
 
         <TabsContent value="settings" className="flex max-w-2xl flex-col gap-6">
+          <RenameDatasetPanel key={ds.name} datasetId={ds.id} datasetName={ds.name} onRenamed={() => void load()} />
           <ResetPanel
             datasetId={ds.id}
             datasetName={ds.name}

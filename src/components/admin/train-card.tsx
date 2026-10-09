@@ -50,7 +50,7 @@ function Steps({ state }: { state: string }) {
                 !done && !cur && "border-border text-muted-foreground",
               )}
             >
-              {done ? <Check className="size-3.5" aria-hidden /> : cur ? <Spinner className="size-3.5" /> : i + 1}
+              {done ? <Check className="size-3.5" aria-hidden /> : cur ? <Spinner className="size-3.5 text-primary-foreground" /> : i + 1}
             </span>
             <span className={cn("truncate", cur ? "font-medium" : "text-muted-foreground")}>{st.label}</span>
           </li>

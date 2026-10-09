@@ -24,7 +24,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ datasetId: 
   const g = await guard(request, ctx);
   if (g instanceof Response) return g;
   if (!g.allowed) return ok<TrainingStatus>({ allowed: false });
-  const [setup, train] = await Promise.all([setupState(), trainState(g.datasetId)]);
+  const train = await trainState(g.datasetId);
+  // A running training job proves YOLO is installed; skip the slow import probe while it runs.
+  const running = train.state === "preparing" || train.state === "training" || train.state === "exporting";
+  const setup: SetupState = running ? { python: true, ready: true, job: "idle" } : await setupState();
   return ok<TrainingStatus>({ allowed: true, setup, train });
 }
 

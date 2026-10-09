@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { ClassDef } from "@/lib/types";
-import { Plus, RefreshCw, Tags, Trash2 } from "lucide-react";
+import { Check, Plus, RefreshCw, Tags, Trash2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,11 +62,27 @@ export function ClassesEditor({ datasetId, onChanged }: { datasetId: string; onC
     void load();
   }
 
+  const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  /** Shows the new color at once; saves after the custom picker stops moving. */
+  function recolor(c: ClassDef, color: string) {
+    setClasses((cur) => cur.map((x) => (x.id === c.id ? { ...x, color } : x)));
+    clearTimeout(saveTimers.current.get(c.id));
+    saveTimers.current.set(c.id, setTimeout(async () => {
+      saveTimers.current.delete(c.id);
+      const { error } = await createClient().from("classes").update({ color }).eq("id", c.id);
+      if (error) {
+        setErr(error.message);
+        void load();
+      }
+    }, 350));
+  }
+
   return (
     <Card aria-labelledby="cl-h" role="region">
       <CardHeader>
         <CardTitle><h2 id="cl-h">Classes</h2></CardTitle>
-        <CardDescription>Index order becomes the YOLO class id. Rename inline; changes save on blur.</CardDescription>
+        <CardDescription>Index order becomes the YOLO class id. Click a color dot to change it; rename inline (saves on blur).</CardDescription>
         <CardAction>
           <Button variant="ghost" size="icon" className="size-12 md:size-10" onClick={() => void load()} aria-label="Refresh classes">
             <RefreshCw aria-hidden />
@@ -91,7 +107,7 @@ export function ClassesEditor({ datasetId, onChanged }: { datasetId: string; onC
             {classes.map((c) => (
               <li key={c.id} className="flex items-center gap-2">
                 <span className="w-6 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">{c.index}</span>
-                <span className="size-4 shrink-0 rounded-full ring-2 ring-border" style={{ background: c.color }} aria-hidden />
+                <ColorPicker name={c.name} color={c.color} onPick={(color) => recolor(c, color)} />
                 <Input
                   aria-label={`Class ${c.index} name`} className="min-w-0 flex-1" defaultValue={c.name}
                   onBlur={(e) => rename(c, e.target.value)}
@@ -123,5 +139,78 @@ export function ClassesEditor({ datasetId, onChanged }: { datasetId: string; onC
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** Color dot that opens a small swatch menu (palette + custom). Saves on pick. */
+function ColorPicker({ name, color, onPick }: { name: string; color: string; onPick: (color: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={root} className="relative shrink-0">
+      <button
+        type="button"
+        aria-label={`Change color of ${name}`}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        onClick={() => setOpen((o) => !o)}
+        className="grid size-10 place-items-center rounded-lg outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring"
+      >
+        <span className="size-5 rounded-full ring-2 ring-border" style={{ background: color }} />
+      </button>
+      {open && (
+        <div
+          role="dialog"
+          aria-label={`Color for ${name}`}
+          className="absolute left-0 top-full z-20 mt-1 flex w-52 flex-col gap-3 rounded-xl border border-border bg-popover p-3 shadow-lg"
+        >
+          <div className="grid grid-cols-4 gap-2">
+            {PALETTE.map((p) => {
+              const on = p.toLowerCase() === color.toLowerCase();
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  aria-label={p}
+                  aria-pressed={on}
+                  onClick={() => {
+                    onPick(p);
+                    setOpen(false);
+                  }}
+                  className="grid size-10 place-items-center rounded-full outline-none ring-offset-2 ring-offset-popover focus-visible:ring-2 focus-visible:ring-ring"
+                  style={{ background: p }}
+                >
+                  {on && <Check className="size-4 text-white drop-shadow" aria-hidden />}
+                </button>
+              );
+            })}
+          </div>
+          <label className="flex items-center justify-between gap-2 border-t border-border pt-3 text-sm">
+            Custom
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => onPick(e.target.value)}
+              className="h-8 w-12 cursor-pointer rounded border border-border bg-transparent"
+            />
+          </label>
+        </div>
+      )}
+    </div>
   );
 }
