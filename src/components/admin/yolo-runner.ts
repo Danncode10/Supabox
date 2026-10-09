@@ -1,7 +1,7 @@
 "use client";
 
 import type { InferenceSession, Tensor } from "onnxruntime-web";
-import { decodeYolov8, letterbox, toChw, type Detection } from "@/lib/yolo/detect";
+import { decodeYolov8, letterbox, toChw, topScore, type Detection } from "@/lib/yolo/detect";
 
 // WASM binaries come from the CDN copy of the exact installed version, so the bundler
 // never has to serve them. Bump together with package.json.
@@ -64,7 +64,7 @@ export class YoloRunner {
     srcW: number,
     srcH: number,
     confidence: number,
-  ): Promise<{ detections: Detection[]; ms: number }> {
+  ): Promise<{ detections: Detection[]; ms: number; top: number }> {
     this.busy = true;
     const t0 = performance.now();
     try {
@@ -78,7 +78,7 @@ export class YoloRunner {
       const t: Tensor = out[this.session.outputNames[0]];
       const data = (await t.getData()) as Float32Array;
       const detections = decodeYolov8(data, { dims: t.dims, box, srcW, srcH, confidence });
-      return { detections, ms: performance.now() - t0 };
+      return { detections, ms: performance.now() - t0, top: topScore(data, t.dims) };
     } finally {
       this.busy = false;
     }

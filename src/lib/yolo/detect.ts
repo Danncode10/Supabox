@@ -66,6 +66,14 @@ export type DecodeOptions = {
   maxDetections?: number;
 };
 
+/** Highest class score anywhere in the output, before any threshold. Tells "weak model" from "nothing there". */
+export function topScore(data: Float32Array, dims: readonly number[]): number {
+  const [, rows, n] = dims;
+  let top = 0;
+  for (let i = 4 * n; i < rows * n; i++) if (data[i] > top) top = data[i];
+  return top;
+}
+
 /** Raw output -> detections in source-image pixels, after confidence filter and NMS. */
 export function decodeYolov8(data: Float32Array, opts: DecodeOptions): Detection[] {
   const [, rows, n] = opts.dims;

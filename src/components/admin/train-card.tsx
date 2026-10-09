@@ -214,7 +214,13 @@ export function TrainCard({
             <Alert variant="success">
               <AlertDescription className="text-foreground">
                 Trained on {train.images ?? "your"} images
-                {train.mAP50 != null && <>, accuracy (mAP50) {(train.mAP50 * 100).toFixed(0)}%</>}. The model is loaded below.
+                {train.mAP50 != null && <>, validation mAP50 {(train.mAP50 * 100).toFixed(0)}%</>}. The model is loaded below.
+                {(train.images ?? 0) < 100 && (
+                  <span className="mt-1 block text-muted-foreground">
+                    With under 100 images the score is measured on only a few photos, so the model can still be unsure on new ones.
+                    Label more varied images and use Thorough (100 epochs) for stronger detections.
+                  </span>
+                )}
               </AlertDescription>
             </Alert>
           )}
@@ -289,7 +295,7 @@ function ActiveRun({
           <span>
             {fmtDuration(elapsed)} elapsed{eta ? ` · about ${fmtDuration(eta)} left` : ""}
           </span>
-          {train.mAP50 != null && <span>accuracy (mAP50) {(train.mAP50 * 100).toFixed(0)}%</span>}
+          {train.mAP50 != null && <span>validation mAP50 {(train.mAP50 * 100).toFixed(0)}%</span>}
         </div>
       </div>
       <div className="flex items-center justify-between gap-2">

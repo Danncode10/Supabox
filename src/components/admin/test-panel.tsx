@@ -20,7 +20,7 @@ import { drawDetections, YoloRunner } from "./yolo-runner";
 
 type Cls = { name: string; color: string };
 type Source = { kind: "local"; status: Extract<LocalModelStatus, { available: true }> } | { kind: "file"; name: string; bytes: number };
-type Stats = { ms: number; fps: number; count: number };
+type Stats = { ms: number; fps: number; count: number; top: number };
 
 function slug(name: string) {
   return name.replace(/[^\w.-]+/g, "_") || "dataset";
@@ -33,7 +33,7 @@ export function TestPanel({ datasetId, datasetName, doneImages }: { datasetId: s
   const [runner, setRunner] = useState<YoloRunner | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [confidence, setConfidence] = useState(0.4);
+  const [confidence, setConfidence] = useState(0.25);
   const [mode, setMode] = useState<"photo" | "camera">("photo");
   const [names, setNames] = useState<string[] | null>(null);
   const confRef = useRef(confidence);
@@ -127,7 +127,7 @@ export function TestPanel({ datasetId, datasetName, doneImages }: { datasetId: s
                 {runner.backend === "webgpu" ? "GPU" : "CPU"}
               </span>
               {source.kind === "local" && source.status.meta?.mAP50 != null && (
-                <span className="text-muted-foreground">accuracy (mAP50) {(source.status.meta.mAP50 * 100).toFixed(0)}%</span>
+                <span className="text-muted-foreground">validation mAP50 {(source.status.meta.mAP50 * 100).toFixed(0)}%</span>
               )}
               {source.kind === "local" && source.status.meta?.trainedAt && (
                 <span className="text-muted-foreground">trained {source.status.meta.trainedAt.slice(0, 16).replace("T", " ")}</span>
@@ -206,7 +206,7 @@ export function TestPanel({ datasetId, datasetName, doneImages }: { datasetId: s
           <PhotoTest runner={runner} confidence={confidence} label={label} />
         </TabsContent>
         <TabsContent value="camera">
-          {mode === "camera" && <CameraTest runner={runner} confRef={confRef} label={label} />}
+          {mode === "camera" && <CameraTest runner={runner} confRef={confRef} confidence={confidence} label={label} />}
         </TabsContent>
       </Tabs>
     </div>
@@ -215,23 +215,35 @@ export function TestPanel({ datasetId, datasetName, doneImages }: { datasetId: s
 
 type LabelFn = (i: number) => { name: string; color: string; text: string };
 
-function Results({ dets, label, stats }: { dets: Detection[]; label: LabelFn; stats: Stats | null }) {
+function Results({ dets, label, stats, confidence }: { dets: Detection[]; label: LabelFn; stats: Stats | null; confidence: number }) {
+  const weak = stats && dets.length === 0 && stats.top >= 0.05;
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm" aria-live="polite">
-      {stats && (
-        <span className="font-mono text-xs tabular-nums text-muted-foreground">
-          {stats.ms.toFixed(0)} ms{stats.fps ? ` · ${stats.fps.toFixed(1)} fps` : ""} · {stats.count} found
-        </span>
-      )}
-      {dets.slice(0, 12).map((d, i) => {
-        const l = label(d.classIndex);
-        return (
-          <span key={i} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-0.5 text-xs">
-            <span className="size-2 rounded-full" style={{ background: l.color }} aria-hidden />
-            {l.name} {(d.score * 100).toFixed(0)}%
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2 text-sm" aria-live="polite">
+        {stats && (
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            {stats.ms.toFixed(0)} ms{stats.fps ? ` · ${stats.fps.toFixed(1)} fps` : ""} · {stats.count} found
           </span>
-        );
-      })}
+        )}
+        {dets.slice(0, 12).map((d, i) => {
+          const l = label(d.classIndex);
+          return (
+            <span key={i} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-0.5 text-xs">
+              <span className="size-2 rounded-full" style={{ background: l.color }} aria-hidden />
+              {l.name} {(d.score * 100).toFixed(0)}%
+            </span>
+          );
+        })}
+      </div>
+      {weak && (
+        <Alert variant="warning">
+          <AlertDescription>
+            Nothing above {Math.round(confidence * 100)}%. The model&apos;s strongest guess is {Math.round(stats.top * 100)}%
+            {stats.top < confidence ? `: drag the slider below ${Math.round(stats.top * 100)}% to see it` : ""}. A model this unsure needs more
+            labeled images (aim for 100+ in different places and lighting) and a longer training run.
+          </AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }
@@ -251,10 +263,10 @@ function PhotoTest({ runner, confidence, label }: { runner: YoloRunner | null; c
     let live = true;
     void runner
       .detect(img.el, img.el.naturalWidth, img.el.naturalHeight, confidence)
-      .then(({ detections, ms }) => {
+      .then(({ detections, ms, top }) => {
         if (!live) return;
         setDets(detections);
-        setStats({ ms, fps: 0, count: detections.length });
+        setStats({ ms, fps: 0, count: detections.length, top });
         if (overlay.current) drawDetections(overlay.current, img.el.naturalWidth, img.el.naturalHeight, detections, label);
       })
       .catch((e: Error) => live && setErr(e.message));
@@ -291,7 +303,7 @@ function PhotoTest({ runner, confidence, label }: { runner: YoloRunner | null; c
       {err && <Alert variant="danger"><AlertDescription>{err}</AlertDescription></Alert>}
       {img && (
         <>
-          <Results dets={dets} label={label} stats={stats} />
+          <Results dets={dets} label={label} stats={stats} confidence={confidence} />
           <div className="relative w-fit max-w-full overflow-hidden rounded-xl border border-border">
             {/* eslint-disable-next-line @next/next/no-img-element -- local blob preview */}
             <img src={img.url} alt="Test photo" className="block max-h-[70dvh] w-auto max-w-full" />
@@ -303,7 +315,9 @@ function PhotoTest({ runner, confidence, label }: { runner: YoloRunner | null; c
   );
 }
 
-function CameraTest({ runner, confRef, label }: { runner: YoloRunner | null; confRef: React.RefObject<number>; label: LabelFn }) {
+function CameraTest({
+  runner, confRef, confidence, label,
+}: { runner: YoloRunner | null; confRef: React.RefObject<number>; confidence: number; label: LabelFn }) {
   const video = useRef<HTMLVideoElement>(null);
   const overlay = useRef<HTMLCanvasElement>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -355,13 +369,13 @@ function CameraTest({ runner, confRef, label }: { runner: YoloRunner | null; con
       const v = video.current;
       if (v && v.readyState >= 2 && !runner.running) {
         try {
-          const { detections, ms } = await runner.detect(v, v.videoWidth, v.videoHeight, confRef.current ?? 0.4);
+          const { detections, ms, top } = await runner.detect(v, v.videoWidth, v.videoHeight, confRef.current ?? 0.25);
           const now = performance.now();
           fps = fps ? fps * 0.8 + (1000 / (now - last)) * 0.2 : 1000 / (now - last);
           last = now;
           if (overlay.current) drawDetections(overlay.current, v.videoWidth, v.videoHeight, detections, label, facing === "user");
           setDets(detections);
-          setStats({ ms, fps, count: detections.length });
+          setStats({ ms, fps, count: detections.length, top });
         } catch (e) {
           setErr((e as Error).message);
           return;
@@ -396,7 +410,7 @@ function CameraTest({ runner, confRef, label }: { runner: YoloRunner | null; con
       </div>
       {!runner && <p className="text-sm text-muted-foreground">Load a model above first.</p>}
       {err && <Alert variant="danger"><AlertDescription>{err}</AlertDescription></Alert>}
-      {on && <Results dets={dets} label={label} stats={stats} />}
+      {on && <Results dets={dets} label={label} stats={stats} confidence={confidence} />}
       <div className={cn("relative w-fit max-w-full overflow-hidden rounded-xl border border-border bg-muted", !on && "hidden")}>
         {/* Front camera shows like a selfie; drawDetections mirrors box positions to match. */}
         <video ref={video} playsInline muted className={cn("block max-h-[70dvh] w-auto max-w-full", facing === "user" && "-scale-x-100")} />
