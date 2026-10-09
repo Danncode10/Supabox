@@ -44,7 +44,7 @@ export const UploadDropzone = forwardRef<
       <span className="flex flex-col gap-1">
         <span className="text-base font-semibold">Drop images here, or click to choose</span>
         <span className="text-sm text-muted-foreground">
-          {hint ?? "JPEG, PNG or WebP. Saved to the Supabase images bucket and renamed in order."}
+          {hint ?? "JPEG, PNG, WebP, HEIC and more. Converted to JPEG, saved to the Supabase images bucket and renamed in order."}
         </span>
       </span>
       <span className="inline-flex h-12 items-center rounded-lg bg-primary px-6 text-base font-medium text-primary-foreground [box-shadow:var(--inset-highlight),var(--elev-xs)] md:h-10 md:px-4 md:text-sm">
@@ -67,20 +67,12 @@ export const UploadDropzone = forwardRef<
   );
 });
 
-export function CompressToggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+/** States the storage policy so admins know what lands in the bucket. */
+export function UploadNote() {
   return (
-    <label className="flex min-h-12 cursor-pointer items-center gap-3 text-sm md:min-h-10">
-      <input
-        type="checkbox"
-        className="size-5 shrink-0 accent-primary"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        disabled={disabled}
-      />
-      <span>
-        Compress to {MAX_SIDE}px JPEG <span className="text-muted-foreground">(saves free-tier storage)</span>
-      </span>
-    </label>
+    <p className="text-sm text-muted-foreground">
+      Every image, HEIC included, is converted to a JPEG of at most {MAX_SIDE}px before upload, to keep free-tier storage low.
+    </p>
   );
 }
 

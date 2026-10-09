@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronRight, Download, Images, ScanSearch, SearchX, Tags, Type, Upload, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Download, Images, ScanSearch, SearchX, Settings, Tags, Type, Upload, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { DatasetStatus, ImageStatus } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -14,12 +14,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { ClassesEditor } from "./classes-editor";
+import { DeleteDatasetPanel } from "./delete-dataset-panel";
 import { statusVariant, WORKSPACE_TABS, type WorkspaceTab } from "./dataset-stats";
 import { ExportPanel } from "./export-panel";
 import { ImageGallery, type StatusCounts } from "./image-gallery";
 import { NamingEditor } from "./naming-editor";
 import { ResetPanel } from "./reset-panel";
-import { CompressToggle, UploadDropzone, UploadQueue } from "./uploader";
+import { UploadDropzone, UploadNote, UploadQueue } from "./uploader";
 import { ACCEPT_ATTR, pickImages, useUploader } from "./use-uploader";
 
 
@@ -72,7 +73,6 @@ export function DatasetAdmin({
   const [classCount, setClassCount] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [tab, setTab] = useState<WorkspaceTab>(initialTab);
-  const [compress, setCompress] = useState(true);
   const [showDrop, setShowDrop] = useState(openUpload);
   const [rejected, setRejected] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -129,9 +129,9 @@ export function DatasetAdmin({
       if (ok.length === 0) return;
       setTab("images");
       setShowDrop(false);
-      void upload(ok, compress);
+      void upload(ok);
     },
-    [upload, compress],
+    [upload],
   );
 
   // Page-wide drag and drop: drop files anywhere in the workspace to upload.
@@ -275,6 +275,7 @@ export function DatasetAdmin({
               { key: "classes", label: "Classes", icon: Tags, n: classCount },
               { key: "naming", label: "Naming", icon: Type, n: null },
               { key: "export", label: "Export", icon: Download, n: null },
+              { key: "settings", label: "Settings", icon: Settings, n: null },
             ] as const
           ).map((t) => (
             <TabsTrigger
@@ -304,7 +305,7 @@ export function DatasetAdmin({
                 }
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <CompressToggle checked={compress} onChange={setCompress} disabled={uploader.busy} />
+                <UploadNote />
                 {showDrop && !empty && (
                   <Button variant="ghost" size="lg" className="md:h-9" onClick={() => setShowDrop(false)}>
                     <X aria-hidden />
@@ -318,7 +319,7 @@ export function DatasetAdmin({
           {rejected > 0 && (
             <Alert variant="warning">
               <AlertDescription>
-                {rejected} file{rejected === 1 ? " was" : "s were"} skipped. Only JPEG, PNG and WebP images upload.
+                {rejected} file{rejected === 1 ? " was" : "s were"} skipped because they are not images.
               </AlertDescription>
             </Alert>
           )}
@@ -342,7 +343,7 @@ export function DatasetAdmin({
               />
               {!showDrop && (
                 <div className="md:hidden">
-                  <CompressToggle checked={compress} onChange={setCompress} disabled={uploader.busy} />
+                  <UploadNote />
                 </div>
               )}
             </>
@@ -364,7 +365,7 @@ export function DatasetAdmin({
           />
         </TabsContent>
 
-        <TabsContent value="export" className="flex flex-col gap-10">
+        <TabsContent value="export" className="flex flex-col gap-6">
           <ExportPanel
             datasetId={ds.id}
             datasetName={ds.name}
@@ -372,17 +373,24 @@ export function DatasetAdmin({
             lastExportedAt={ds.last_exported_at}
             onChanged={load}
           />
-          <div className="max-w-2xl">
-            <ResetPanel
-              datasetId={ds.id}
-              datasetName={ds.name}
-              lastExportedAt={ds.last_exported_at}
-              onChanged={() => {
-                void load();
-                setRefreshKey((k) => k + 1);
-              }}
-            />
-          </div>
+        </TabsContent>
+
+        <TabsContent value="settings" className="flex max-w-2xl flex-col gap-6">
+          <ResetPanel
+            datasetId={ds.id}
+            datasetName={ds.name}
+            lastExportedAt={ds.last_exported_at}
+            onChanged={() => {
+              void load();
+              setRefreshKey((k) => k + 1);
+            }}
+          />
+          <DeleteDatasetPanel
+            datasetId={ds.id}
+            datasetName={ds.name}
+            lastExportedAt={ds.last_exported_at}
+            onExportClick={() => changeTab("export")}
+          />
         </TabsContent>
       </Tabs>
 
@@ -397,7 +405,7 @@ export function DatasetAdmin({
         <div className="flex size-full flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-primary text-center">
           <Upload className="size-8 text-primary" />
           <p className="text-lg font-semibold">Drop to upload to {ds.name}</p>
-          <p className="text-sm text-muted-foreground">JPEG, PNG or WebP</p>
+          <p className="text-sm text-muted-foreground">JPEG, PNG, WebP or HEIC</p>
         </div>
       </div>
     </div>

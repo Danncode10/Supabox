@@ -11,42 +11,66 @@ export type UploadItem = { name: string; state: "queued" | "uploading" | "done" 
 export const UPLOAD_BATCH = 20;
 const CONCURRENCY = 3;
 export const MAX_SIDE = 1280;
-export const ACCEPTED = /^image\/(jpeg|png|webp)$/;
-export const ACCEPT_ATTR = "image/jpeg,image/png,image/webp";
+export const JPEG_QUALITY = 0.8;
+// iOS/macOS often hand over HEIC with an empty MIME type, so extensions count too.
+const IMAGE_EXT = /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif|tiff?)$/i;
+const HEIC = /\.(heic|heif)$/i;
+export const ACCEPT_ATTR = "image/*,.heic,.heif";
 
-/** Keeps only JPEG/PNG/WebP files. */
+function isImage(f: File) {
+  return f.type.startsWith("image/") || IMAGE_EXT.test(f.name);
+}
+
+function isHeic(f: File) {
+  return /^image\/hei[cf]/.test(f.type) || HEIC.test(f.name);
+}
+
+/** Keeps anything that looks like an image; decoding failures are reported per file later. */
 export function pickImages(list: FileList | File[] | null | undefined): { ok: File[]; rejected: number } {
   const all = Array.from(list ?? []);
-  const ok = all.filter((f) => ACCEPTED.test(f.type));
+  const ok = all.filter(isImage);
   return { ok, rejected: all.length - ok.length };
 }
 
 type Prepared = { blob: Blob; ext: string; type: string; width: number; height: number };
 
-async function prepare(file: File, compress: boolean): Promise<Prepared> {
-  const bmp = await createImageBitmap(file);
-  const { width, height } = bmp;
-  const origExt = (file.name.split(".").pop() ?? "jpg").toLowerCase();
-  if (!compress) {
-    bmp.close();
-    return { blob: file, ext: origExt, type: file.type, width, height };
+/** Native decode first (Safari reads HEIC itself); libheif WASM only loads for HEIC the browser can't read. */
+async function decode(file: File): Promise<ImageBitmap> {
+  try {
+    return await createImageBitmap(file);
+  } catch (e) {
+    if (!isHeic(file)) throw new Error("unsupported or corrupt image");
+    const { heicTo } = await import("heic-to/next");
+    return heicTo({ blob: file, type: "bitmap" }).catch(() => {
+      throw e instanceof Error ? e : new Error("could not read HEIC");
+    });
   }
-  const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
-  const w = Math.round(width * scale);
-  const h = Math.round(height * scale);
+}
+
+/** Every upload is stored as a JPEG of at most MAX_SIDE px to keep the free-tier bucket small. */
+async function prepare(file: File): Promise<Prepared> {
+  const bmp = await decode(file);
+  const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+  const w = Math.round(bmp.width * scale);
+  const h = Math.round(bmp.height * scale);
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
-  canvas.getContext("2d")!.drawImage(bmp, 0, 0, w, h);
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#fff"; // JPEG has no alpha; flatten transparent PNG/WebP onto white, not black.
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(bmp, 0, 0, w, h);
   bmp.close();
   const blob = await new Promise<Blob>((res, rej) =>
-    canvas.toBlob((b) => (b ? res(b) : rej(new Error("compression failed"))), "image/jpeg", 0.8),
+    canvas.toBlob((b) => (b ? res(b) : rej(new Error("JPEG conversion failed"))), "image/jpeg", JPEG_QUALITY),
   );
-  return { blob, ext: "jpg", type: "image/jpeg", width: w, height: h };
+  // An already-small JPEG can come out larger after re-encoding; keep the original then.
+  const keepOriginal = file.type === "image/jpeg" && scale === 1 && file.size <= blob.size;
+  return { blob: keepOriginal ? file : blob, ext: "jpg", type: "image/jpeg", width: w, height: h };
 }
 
 /**
- * Upload pipeline: optional client compression, then signed upload URLs from
+ * Upload pipeline: client-side conversion to compressed JPEG (HEIC included), then signed upload URLs from
  * /api/admin/upload-urls, upload into the `images` bucket, then insert the `images` row.
  * `onBatch` runs after every batch so galleries can refresh while a long upload runs.
  */
@@ -60,7 +84,7 @@ export function useUploader(datasetId: string, onBatch: () => void) {
     setItems((cur) => cur.map((it, idx) => (idx === i ? { ...it, ...p } : it)));
 
   const upload = useCallback(
-    async (files: File[], compress: boolean) => {
+    async (files: File[]) => {
       if (busyRef.current || files.length === 0) return;
       busyRef.current = true;
       setBusy(true);
@@ -71,7 +95,7 @@ export function useUploader(datasetId: string, onBatch: () => void) {
         for (let b = 0; b < files.length; b += UPLOAD_BATCH) {
           const batch = files.slice(b, b + UPLOAD_BATCH);
           batch.forEach((_, k) => patch(b + k, { state: "uploading" }));
-          const prepared = await Promise.all(batch.map((f) => prepare(f, compress).catch((e: Error) => e)));
+          const prepared = await Promise.all(batch.map((f) => prepare(f).catch((e: Error) => e)));
           const okIdx = prepared.map((p, k) => (p instanceof Error ? -1 : k)).filter((k) => k >= 0);
           prepared.forEach((p, k) => {
             if (p instanceof Error) patch(b + k, { state: "error", note: `${batch[k].name}: ${p.message}` });

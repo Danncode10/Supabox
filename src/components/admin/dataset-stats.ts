@@ -62,5 +62,5 @@ export function statusVariant(status: string) {
 }
 
 /** Sections of /admin/d/[id]; also the accepted `?tab=` values. */
-export const WORKSPACE_TABS = ["images", "classes", "naming", "export"] as const;
+export const WORKSPACE_TABS = ["images", "classes", "naming", "export", "settings"] as const;
 export type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
