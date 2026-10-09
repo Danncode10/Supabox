@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronRight, CircleHelp, Copy } from "lucide-react";
+import { Check, ChevronRight, CircleHelp, Copy, RotateCcw, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const SETUP = [
   "cd ~/Desktop/Supabox",
@@ -64,10 +65,58 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 
 const code = "whitespace-nowrap rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground";
 
-/** Step-by-step guide: export, set up Python once, train locally, then test here. */
-export function TestGuide({ trainCmd }: { trainCmd: string }) {
+const ACTIVATE = ["cd ~/Desktop/Supabox", "source .venv/bin/activate"].join("\n");
+
+const b = "text-foreground";
+
+function DownloadStep({ n, again }: { n: number; again?: boolean }) {
   return (
-    <Dialog>
+    <Step n={n} title={again ? "Download the updated dataset" : "Download the dataset"}>
+      <p>
+        Open the <strong className={b}>Export</strong> tab and click <strong className={b}>Download YOLOv8 .zip</strong>. Leave it zipped in Downloads.
+      </p>
+      {again && (
+        <p>
+          Delete the old zip from Downloads first. Otherwise macOS saves the new one as <code className={code}>Name (1).zip</code> and you would train on
+          the old labels.
+        </p>
+      )}
+    </Step>
+  );
+}
+
+function TrainStep({ n, trainCmd, again }: { n: number; trainCmd: string; again?: boolean }) {
+  return (
+    <Step n={n} title="Train">
+      <p>{again ? "In that Terminal window:" : "In the same Terminal window:"}</p>
+      <CodeBlock text={trainCmd} />
+      <p>
+        Uses your Mac&apos;s GPU; about 5 to 15 minutes for 40 images on an M1. Wait for <code className={code}>Done: …/best.onnx</code>.
+        {again && " The new model replaces the old one."}
+      </p>
+    </Step>
+  );
+}
+
+function TestStep({ n }: { n: number }) {
+  return (
+    <Step n={n} title="Test it here">
+      <p>
+        Click <strong className={b}>Reload local model</strong>, then use <strong className={b}>Photo</strong> or <strong className={b}>Live camera</strong>.
+        Missing detections? Lower the confidence slider. Wrong boxes? Raise it.
+      </p>
+    </Step>
+  );
+}
+
+/**
+ * Two guides: first-time setup (install Python deps, then train) and the short loop for
+ * retraining after more labeling. Opens on "Train again" once a local model exists.
+ */
+export function TestGuide({ trainCmd, hasModel }: { trainCmd: string; hasModel: boolean }) {
+  const [tab, setTab] = useState<"first" | "again">(hasModel ? "again" : "first");
+  return (
+    <Dialog onOpenChange={(open) => open && setTab(hasModel ? "again" : "first")}>
       <DialogTrigger asChild>
         <Button variant="outline" size="lg" className="md:h-10">
           <CircleHelp aria-hidden />
@@ -82,35 +131,41 @@ export function TestGuide({ trainCmd }: { trainCmd: string }) {
           </DialogDescription>
         </DialogHeader>
 
-        <ol className="flex flex-col gap-6">
-          <Step n={1} title="Download the dataset">
-            <p>
-              Open the <strong className="text-foreground">Export</strong> tab and click <strong className="text-foreground">Download YOLOv8 .zip</strong>.
-              Leave it zipped in Downloads.
-            </p>
-          </Step>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "first" | "again")} className="gap-6">
+          <TabsList aria-label="Guide" className="grid w-full grid-cols-2">
+            <TabsTrigger value="first"><Wrench aria-hidden />First time</TabsTrigger>
+            <TabsTrigger value="again"><RotateCcw aria-hidden />Train again</TabsTrigger>
+          </TabsList>
 
-          <Step n={2} title="Install YOLO (first time only)">
-            <p>Open Terminal (⌘ Space, type Terminal), paste these and press Return:</p>
-            <CodeBlock text={SETUP} />
-            <p>Downloads PyTorch (about 1 GB), so give it a few minutes.</p>
-          </Step>
+          <TabsContent value="first" className="flex flex-col gap-6">
+            <p className="text-sm text-muted-foreground">Do this once on this Mac. It installs YOLO and trains your first model.</p>
+            <ol className="flex flex-col gap-6">
+              <DownloadStep n={1} />
+              <Step n={2} title="Install YOLO">
+                <p>Open Terminal (⌘ Space, type Terminal), paste these and press Return:</p>
+                <CodeBlock text={SETUP} />
+                <p>Downloads PyTorch (about 1 GB), so give it a few minutes. If it times out, run the last line again.</p>
+              </Step>
+              <TrainStep n={3} trainCmd={trainCmd} />
+              <TestStep n={4} />
+            </ol>
+          </TabsContent>
 
-          <Step n={3} title="Train">
-            <p>In the same Terminal window:</p>
-            <CodeBlock text={trainCmd} />
-            <p>
-              Uses your Mac&apos;s GPU; about 5 to 15 minutes for 40 images on an M1. Wait for <code className={code}>Done: …/best.onnx</code>.
+          <TabsContent value="again" className="flex flex-col gap-6">
+            <p className="text-sm text-muted-foreground">
+              Already set up? After labeling more images or fixing boxes, retrain with these steps. No reinstalling.
             </p>
-          </Step>
-
-          <Step n={4} title="Test it here">
-            <p>
-              Click <strong className="text-foreground">Reload local model</strong>, then use <strong className="text-foreground">Photo</strong> or{" "}
-              <strong className="text-foreground">Live camera</strong>. Missing detections? Lower the confidence slider. Wrong boxes? Raise it.
-            </p>
-          </Step>
-        </ol>
+            <ol className="flex flex-col gap-6">
+              <DownloadStep n={1} again />
+              <Step n={2} title="Open Terminal in the project">
+                <p>Every new Terminal window needs this first:</p>
+                <CodeBlock text={ACTIVATE} />
+              </Step>
+              <TrainStep n={3} trainCmd={trainCmd} again />
+              <TestStep n={4} />
+            </ol>
+          </TabsContent>
+        </Tabs>
 
         <details className="group rounded-xl border border-border text-sm">
           <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
@@ -118,14 +173,13 @@ export function TestGuide({ trainCmd }: { trainCmd: string }) {
             Troubleshooting
           </summary>
           <ul className="list-disc space-y-2 px-4 pb-4 pl-9 text-muted-foreground">
-            <li><strong className="text-foreground">pip times out:</strong> just run the install command again. It resumes where it stopped.</li>
-            <li><strong className="text-foreground">&quot;ultralytics is not installed&quot;:</strong> you are outside the venv. Run <code className={code}>source .venv/bin/activate</code>.</li>
-            <li><strong className="text-foreground">Shows CPU (WASM), not WebGPU:</strong> use Chrome for the fastest live camera. Safari still works, just slower.</li>
-            <li><strong className="text-foreground">Camera blocked:</strong> click the camera icon in the address bar, allow it, then press Start camera again.</li>
-            <li><strong className="text-foreground">It detects other people as your class:</strong> the model has only seen one kind of thing. Add photos that also contain other people or objects, box only your class, export and train again.</li>
-            <li><strong className="text-foreground">Testing on another computer or the live site:</strong> the <code className={code}>models/</code> folder only exists on this Mac. Use <strong className="text-foreground">Choose .onnx file</strong> and pick <code className={code}>models/&lt;dataset&gt;/best.onnx</code>.</li>
-            <li><strong className="text-foreground">New Terminal window:</strong> run <code className={code}>cd ~/Desktop/Supabox</code> and <code className={code}>source .venv/bin/activate</code> before training again.</li>
-            <li><strong className="text-foreground">Zip has another name:</strong> change the <code className={code}>~/Downloads/….zip</code> path in the train command.</li>
+            <li><strong className={b}>pip times out:</strong> run the install command again. It resumes where it stopped.</li>
+            <li><strong className={b}>&quot;ultralytics is not installed&quot;:</strong> you are outside the venv. Run <code className={code}>source .venv/bin/activate</code>.</li>
+            <li><strong className={b}>&quot;zip not found&quot;:</strong> the file in Downloads has another name. Change the <code className={code}>~/Downloads/….zip</code> path in the train command.</li>
+            <li><strong className={b}>Shows CPU (WASM), not WebGPU:</strong> use Chrome for the fastest live camera. Safari still works, just slower.</li>
+            <li><strong className={b}>Camera blocked:</strong> click the camera icon in the address bar, allow it, then press Start camera again.</li>
+            <li><strong className={b}>It detects other people as your class:</strong> add photos that also contain other people or objects, box only your class, then train again.</li>
+            <li><strong className={b}>Testing on another computer or the live site:</strong> the <code className={code}>models/</code> folder only exists on this Mac. Use <strong className={b}>Choose .onnx file</strong> and pick <code className={code}>models/&lt;dataset&gt;/best.onnx</code>.</li>
           </ul>
         </details>
       </DialogContent>

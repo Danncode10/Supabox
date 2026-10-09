@@ -105,7 +105,7 @@ export function TestPanel({ datasetId, datasetName }: { datasetId: string; datas
       <Card>
         <CardHeader>
           <CardTitle><h2>Model</h2></CardTitle>
-          <CardAction><TestGuide trainCmd={trainCmd} /></CardAction>
+          <CardAction><TestGuide trainCmd={trainCmd} hasModel={local?.available === true} /></CardAction>
           <CardDescription>
             Detection runs on this device in the browser (GPU when available), so nothing is uploaded and it is just as fast deployed as on localhost.
           </CardDescription>
