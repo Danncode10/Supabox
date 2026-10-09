@@ -136,3 +136,7 @@ npm run db:types     # generate src/types/supabase.ts from the linked project
 - `docs/SETUP.md`: security model details
 - `docs/UI-KIT.md`: design tokens and components
 - `docs/DATABOX-ANALYSIS.md`: what was kept from the old Databox repo
+
+## Contributing and license
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) to get set up and send changes. Supabox is released under the [MIT License](LICENSE).
