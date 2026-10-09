@@ -2,6 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fail, ok, requireAdmin } from "@/lib/supabase/api";
 import { UUID_RE } from "@/lib/supabase/images";
+import { localPath } from "@/lib/local-paths";
 
 export type LocalModelMeta = {
   names?: string[];
@@ -30,7 +31,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ datasetId: 
   const { datasetId } = await ctx.params;
   if (!UUID_RE.test(datasetId)) return fail(422, "invalid_dataset", "Invalid dataset id");
 
-  const dir = path.join(process.cwd(), "models", datasetId.toLowerCase());
+  const dir = localPath("models", datasetId.toLowerCase());
   const onnx = path.join(dir, "best.onnx");
   const info = await stat(onnx).catch(() => null);
 

@@ -1,5 +1,6 @@
 import "server-only";
 import { IMAGE_BUCKET } from "@/lib/types";
+import { thumbPathOf } from "@/lib/thumbs";
 import { createAdminClient } from "./admin";
 import type { AuthContext } from "./api";
 
@@ -24,7 +25,7 @@ export async function deleteImages(ctx: AuthContext, ids: string[]): Promise<Del
   // Service role for the Storage API call; the admin check already happened above and in RLS.
   const admin = createAdminClient();
   let objectsRemoved = 0;
-  const paths = deleted.map((d) => d.storagePath);
+  const paths = deleted.flatMap((d) => [d.storagePath, thumbPathOf(d.storagePath)]);
   for (let i = 0; i < paths.length; i += 100) {
     const { data: gone, error: rmErr } = await admin.storage.from(IMAGE_BUCKET).remove(paths.slice(i, i + 100));
     if (rmErr) {

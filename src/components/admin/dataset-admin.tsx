@@ -378,7 +378,7 @@ export function DatasetAdmin({
         </TabsContent>
 
         <TabsContent value="test">
-          {tab === "test" && <TestPanel datasetId={ds.id} datasetName={ds.name} />}
+          {tab === "test" && <TestPanel datasetId={ds.id} datasetName={ds.name} doneImages={counts ? counts.done : null} />}
         </TabsContent>
 
         <TabsContent value="settings" className="flex max-w-2xl flex-col gap-6">

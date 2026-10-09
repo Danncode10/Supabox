@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { IMAGE_BUCKET } from "@/lib/types";
+import { THUMB_SIDE, thumbPathOf } from "@/lib/thumbs";
 import type { UploadUrl } from "@/app/api/admin/upload-urls/route";
 import { api, fmtBytes } from "./ui";
 
@@ -32,7 +33,23 @@ export function pickImages(list: FileList | File[] | null | undefined): { ok: Fi
   return { ok, rejected: all.length - ok.length };
 }
 
-type Prepared = { blob: Blob; ext: string; type: string; width: number; height: number };
+type Prepared = { blob: Blob; thumb: Blob | null; ext: string; type: string; width: number; height: number };
+
+/** Small JPEG preview for galleries and image lists; a few KB instead of the full image. */
+export async function makeThumb(src: CanvasImageSource, w: number, h: number): Promise<Blob | null> {
+  const scale = Math.min(1, THUMB_SIDE / Math.max(w, h));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(w * scale));
+  c.height = Math.max(1, Math.round(h * scale));
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(src, 0, 0, c.width, c.height);
+  return new Promise((res) => c.toBlob((b) => res(b), "image/jpeg", 0.7));
+}
+
+/** Long browser cache for stored images; object paths only get reused after a reset. */
+export const CACHE_CONTROL = "604800";
 
 /** Native decode first (Safari reads HEIC itself); libheif WASM only loads for HEIC the browser can't read. */
 async function decode(file: File): Promise<ImageBitmap> {
@@ -60,13 +77,14 @@ async function prepare(file: File): Promise<Prepared> {
   ctx.fillStyle = "#fff"; // JPEG has no alpha; flatten transparent PNG/WebP onto white, not black.
   ctx.fillRect(0, 0, w, h);
   ctx.drawImage(bmp, 0, 0, w, h);
+  const thumb = await makeThumb(canvas, w, h).catch(() => null);
   bmp.close();
   const blob = await new Promise<Blob>((res, rej) =>
     canvas.toBlob((b) => (b ? res(b) : rej(new Error("JPEG conversion failed"))), "image/jpeg", JPEG_QUALITY),
   );
   // An already-small JPEG can come out larger after re-encoding; keep the original then.
   const keepOriginal = file.type === "image/jpeg" && scale === 1 && file.size <= blob.size;
-  return { blob: keepOriginal ? file : blob, ext: "jpg", type: "image/jpeg", width: w, height: h };
+  return { blob: keepOriginal ? file : blob, thumb, ext: "jpg", type: "image/jpeg", width: w, height: h };
 }
 
 /**
@@ -118,7 +136,7 @@ export function useUploader(datasetId: string, onBatch: () => void) {
               const p = prepared[k] as Prepared;
               const u = urls[n];
               try {
-                const { error: upErr } = await supabase.storage.from(IMAGE_BUCKET).uploadToSignedUrl(u.path, u.token, p.blob);
+                const { error: upErr } = await supabase.storage.from(IMAGE_BUCKET).uploadToSignedUrl(u.path, u.token, p.blob, { cacheControl: CACHE_CONTROL });
                 if (upErr) throw upErr;
                 const { error: dbErr } = await supabase.from("images").insert({
                   dataset_id: datasetId, name: u.name, number: u.number, storage_path: u.path,
@@ -127,6 +145,13 @@ export function useUploader(datasetId: string, onBatch: () => void) {
                 if (dbErr) {
                   await supabase.storage.from(IMAGE_BUCKET).remove([u.path]);
                   throw dbErr;
+                }
+                // Best effort: galleries fall back to the full image when a thumbnail is missing.
+                if (p.thumb) {
+                  await supabase.storage
+                    .from(IMAGE_BUCKET)
+                    .upload(thumbPathOf(u.path), p.thumb, { contentType: "image/jpeg", cacheControl: CACHE_CONTROL, upsert: true })
+                    .catch(() => {});
                 }
                 patch(b + k, { state: "done", note: `${batch[k].name} → ${u.name} (${fmtBytes(p.blob.size)})` });
               } catch (e) {

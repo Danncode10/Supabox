@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, CameraOff, Cpu, FileUp, ImageUp, RefreshCw, SwitchCamera, Zap } from "lucide-react";
+import { Camera, CameraOff, Cpu, FileUp, ImageUp, SwitchCamera, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Detection } from "@/lib/yolo/detect";
 import type { LocalModelStatus } from "@/app/api/admin/models/[datasetId]/route";
@@ -14,7 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { CopyLine } from "./export-panel";
 import { TestGuide } from "./test-guide";
-import { api, fmtBytes } from "./ui";
+import { TrainCard } from "./train-card";
+import { api } from "./ui";
 import { drawDetections, YoloRunner } from "./yolo-runner";
 
 type Cls = { name: string; color: string };
@@ -25,7 +26,7 @@ function slug(name: string) {
   return name.replace(/[^\w.-]+/g, "_") || "dataset";
 }
 
-export function TestPanel({ datasetId, datasetName }: { datasetId: string; datasetName: string }) {
+export function TestPanel({ datasetId, datasetName, doneImages }: { datasetId: string; datasetName: string; doneImages: number | null }) {
   const [classes, setClasses] = useState<Cls[]>([]);
   const [local, setLocal] = useState<LocalModelStatus | null>(null);
   const [source, setSource] = useState<Source | null>(null);
@@ -47,6 +48,14 @@ export function TestPanel({ datasetId, datasetName }: { datasetId: string; datas
       setLocal({ available: false });
     }
   }, [datasetId]);
+
+  // false once the server says training can't run here (not localhost): show the manual path instead.
+  const [localTraining, setLocalTraining] = useState(true);
+  const onUnavailable = useCallback(() => setLocalTraining(false), []);
+  const onModelReady = useCallback(() => {
+    setSource(null);
+    void checkLocal();
+  }, [checkLocal]);
 
   useEffect(() => {
     void createClient()
@@ -105,55 +114,50 @@ export function TestPanel({ datasetId, datasetName }: { datasetId: string; datas
       <Card>
         <CardHeader>
           <CardTitle><h2>Model</h2></CardTitle>
-          <CardAction><TestGuide trainCmd={trainCmd} hasModel={local?.available === true} /></CardAction>
-          <CardDescription>
-            Detection runs on this device in the browser (GPU when available), so nothing is uploaded and it is just as fast deployed as on localhost.
-          </CardDescription>
+          {!localTraining && <CardAction><TestGuide trainCmd={trainCmd} hasModel={local?.available === true} /></CardAction>}
+          <CardDescription>Train on your labels, then try the model on a photo or your camera.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          {source && runner ? (
+          {source && runner && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
               <Badge variant="success" dot>Model ready</Badge>
-              <span className="font-medium">
-                {source.kind === "local" ? `models/${datasetId.slice(0, 8)}…/best.onnx` : source.name}
-              </span>
-              <span className="text-muted-foreground">
-                {fmtBytes(source.kind === "local" ? source.status.bytes : source.bytes)}
-              </span>
+              {source.kind === "file" && <span className="font-medium">{source.name}</span>}
               <span className="inline-flex items-center gap-1 text-muted-foreground">
                 {runner.backend === "webgpu" ? <Zap className="size-4 text-primary" aria-hidden /> : <Cpu className="size-4" aria-hidden />}
-                {runner.backend === "webgpu" ? "WebGPU" : "CPU (WASM)"}
+                {runner.backend === "webgpu" ? "GPU" : "CPU"}
               </span>
               {source.kind === "local" && source.status.meta?.mAP50 != null && (
-                <span className="text-muted-foreground">mAP50 {(source.status.meta.mAP50 * 100).toFixed(1)}%</span>
+                <span className="text-muted-foreground">accuracy (mAP50) {(source.status.meta.mAP50 * 100).toFixed(0)}%</span>
               )}
               {source.kind === "local" && source.status.meta?.trainedAt && (
                 <span className="text-muted-foreground">trained {source.status.meta.trainedAt.slice(0, 16).replace("T", " ")}</span>
               )}
             </div>
-          ) : loading ? (
-            <p className="text-sm text-muted-foreground" aria-live="polite">Loading model…</p>
-          ) : local === null ? (
-            <p className="text-sm text-muted-foreground">Looking for a local model…</p>
+          )}
+          {loading && <p className="text-sm text-muted-foreground" aria-live="polite">Loading model…</p>}
+
+          {localTraining ? (
+            <TrainCard datasetId={datasetId} doneImages={doneImages} onModelReady={onModelReady} onUnavailable={onUnavailable} />
           ) : (
-            <Alert>
-              <AlertTitle>No trained model yet</AlertTitle>
-              <AlertDescription className="flex flex-col gap-2">
-                <span>
-                  Download the YOLOv8 .zip from the Export tab, then train on this machine (needs <code className="font-mono">pip install ultralytics onnx</code>).
-                  The model is saved to the gitignored <code className="font-mono">models/</code> folder and loads here automatically.
-                </span>
-              </AlertDescription>
-            </Alert>
+            !source && (
+              <>
+                <Alert>
+                  <AlertTitle>No model loaded</AlertTitle>
+                  <AlertDescription>
+                    Training runs on your own computer with <code className="font-mono">npm run dev</code> at localhost. Here you can load a
+                    trained <code className="font-mono">best.onnx</code> file instead.
+                  </AlertDescription>
+                </Alert>
+                <CopyLine text={trainCmd} />
+              </>
+            )
           )}
 
-          {!(source?.kind === "local") && <CopyLine text={trainCmd} />}
-
           <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline" size="lg" className="md:h-10">
+            <Button asChild variant="ghost" size="lg" className="md:h-9">
               <label>
                 <FileUp aria-hidden />
-                {source ? "Use another .onnx" : "Choose .onnx file"}
+                {source ? "Use another .onnx file" : "Load a .onnx file"}
                 <input
                   type="file"
                   accept=".onnx"
@@ -165,10 +169,6 @@ export function TestPanel({ datasetId, datasetName }: { datasetId: string; datas
                   }}
                 />
               </label>
-            </Button>
-            <Button variant="ghost" size="lg" className="md:h-10" onClick={() => { setSource(null); void checkLocal(); }} disabled={loading}>
-              <RefreshCw aria-hidden />
-              Reload local model
             </Button>
           </div>
 

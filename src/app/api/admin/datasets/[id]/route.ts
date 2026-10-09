@@ -5,21 +5,27 @@ import { IMAGE_BUCKET } from "@/lib/types";
 
 export type DeleteDatasetResult = { datasetId: string; imagesRemoved: number; objectsRemoved: number };
 
-/** Every object under `<datasetId>/`, including orphans left by interrupted uploads. */
-async function listDatasetObjects(admin: ReturnType<typeof createAdminClient>, datasetId: string) {
+/** Every file directly inside `folder` (list() is not recursive; folders come back without an id). */
+async function listFolder(admin: ReturnType<typeof createAdminClient>, folder: string) {
   const paths: string[] = [];
   for (let offset = 0; ; offset += 1000) {
-    const { data, error } = await admin.storage.from(IMAGE_BUCKET).list(datasetId, { limit: 1000, offset });
+    const { data, error } = await admin.storage.from(IMAGE_BUCKET).list(folder, { limit: 1000, offset });
     if (error) throw error;
-    paths.push(...(data ?? []).filter((o) => o.id).map((o) => `${datasetId}/${o.name}`));
+    paths.push(...(data ?? []).filter((o) => o.id).map((o) => `${folder}/${o.name}`));
     if (!data || data.length < 1000) return paths;
   }
+}
+
+/** Every object for the dataset: images, thumbnails, and orphans left by interrupted uploads. */
+async function listDatasetObjects(admin: ReturnType<typeof createAdminClient>, datasetId: string) {
+  const [images, thumbs] = await Promise.all([listFolder(admin, datasetId), listFolder(admin, `${datasetId}/thumbs`)]);
+  return [...images, ...thumbs];
 }
 
 /**
  * DELETE -> ApiResult<DeleteDatasetResult>
  * Permanently deletes a dataset: images (annotations cascade), then the dataset row
- * (classes cascade), then every storage object under `<datasetId>/` in the images bucket.
+ * (classes cascade), then every storage object under `<datasetId>/` (and its thumbs/) in the images bucket.
  * Images go before the dataset because annotations.class_id is ON DELETE RESTRICT.
  */
 export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {

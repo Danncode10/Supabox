@@ -1,12 +1,11 @@
 import { createClient } from "@/lib/supabase/client";
 import { normalizeBox } from "@/lib/yolo/convert";
-import { IMAGE_BUCKET, type ClassDef, type DraftBox, type ImageRecord, type ImageStatus } from "@/lib/types";
+import type { ClassDef, DraftBox, ImageRecord, ImageStatus } from "@/lib/types";
+import { signedUrls } from "@/lib/supabase/signed-urls";
+import { thumbPathOf } from "@/lib/thumbs";
 import type { AnnotatorAdapter } from "./adapter";
 
 const PAGE = 1000;
-/** Signed URL lifetime, and how long before expiry we stop reusing a cached one. */
-const URL_TTL_S = 3600;
-const URL_MARGIN_MS = 5 * 60 * 1000;
 
 type Client = ReturnType<typeof createClient>;
 
@@ -21,7 +20,6 @@ export function createSupabaseAdapter(): AnnotatorAdapter {
   const db = () => (sb ??= createClient());
 
   const paths = new Map<string, string>();
-  const urls = new Map<string, { url: string; exp: number }>();
   let uid: string | null = null;
 
   async function userId() {
@@ -32,39 +30,26 @@ export function createSupabaseAdapter(): AnnotatorAdapter {
     return uid;
   }
 
-  function cached(path: string) {
-    const hit = urls.get(path);
-    return hit && hit.exp - URL_MARGIN_MS > Date.now() ? hit.url : null;
-  }
-
-  async function signedUrls(imageIds: string[]) {
-    const out: Record<string, string> = {};
-    const missing: string[] = [];
-    for (const id of imageIds) {
-      const p = paths.get(id);
-      if (!p) continue;
-      const u = cached(p);
-      if (u) out[id] = u;
-      else missing.push(p);
-    }
-    if (missing.length) {
-      const { data, error } = await db().storage.from(IMAGE_BUCKET).createSignedUrls(missing, URL_TTL_S);
-      if (error) throw new Error(error.message);
-      const exp = Date.now() + URL_TTL_S * 1000;
-      for (const row of data ?? []) if (row.path && row.signedUrl) urls.set(row.path, { url: row.signedUrl, exp });
-      for (const id of imageIds) {
-        const p = paths.get(id);
-        const u = p ? cached(p) : null;
-        if (u) out[id] = u;
-      }
-    }
-    return out;
-  }
-
   async function signedUrl(imageId: string) {
-    const url = (await signedUrls([imageId]))[imageId];
+    const p = paths.get(imageId);
+    const url = p ? (await signedUrls([p]))[p] : null;
     if (!url) throw new Error("Could not get a link for this image. It may have been deleted.");
     return url;
+  }
+
+  /** Small thumbs/ previews, falling back to the full image for images uploaded before thumbnails existed. */
+  async function thumbnailUrls(imageIds: string[]) {
+    const ids = imageIds.filter((id) => paths.has(id));
+    const thumbs = await signedUrls(ids.map((id) => thumbPathOf(paths.get(id)!)));
+    const missing = ids.filter((id) => !thumbs[thumbPathOf(paths.get(id)!)]);
+    const full = missing.length ? await signedUrls(missing.map((id) => paths.get(id)!)) : {};
+    const out: Record<string, string> = {};
+    for (const id of ids) {
+      const p = paths.get(id)!;
+      const u = thumbs[thumbPathOf(p)] ?? full[p];
+      if (u) out[id] = u;
+    }
+    return out;
   }
 
   return {
@@ -153,7 +138,7 @@ export function createSupabaseAdapter(): AnnotatorAdapter {
       if (error) throw new Error(error.message);
     },
 
-    thumbnailUrls: signedUrls,
+    thumbnailUrls,
 
     prefetchImage(imageId) {
       void signedUrl(imageId)

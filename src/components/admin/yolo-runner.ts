@@ -16,7 +16,6 @@ let ortPromise: Promise<Ort> | null = null;
 function loadOrt(): Promise<Ort> {
   ortPromise ??= import("onnxruntime-web/webgpu").then((ort) => {
     ort.env.wasm.wasmPaths = WASM_PATHS;
-    ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 1);
     return ort as unknown as Ort;
   });
   return ortPromise;

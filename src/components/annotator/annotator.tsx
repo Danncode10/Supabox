@@ -29,6 +29,7 @@ import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { DraftBox, ImageRecord, ImageStatus } from "@/lib/types";
+import { groupBySection, sectionOf } from "@/lib/sections";
 import type { AnnotatorAdapter, AnnotatorSession, LoadedImage } from "./adapter";
 import { AnnotatorCanvas } from "./annotator-canvas";
 import { BottomSheet } from "./bottom-sheet";
@@ -36,6 +37,7 @@ import { BoxList } from "./box-list";
 import { ClassPicker } from "./class-picker";
 import { moveBox } from "./geometry";
 import { ImageList } from "./image-list";
+import { SectionCompleteCard, SectionFooter, SectionSwitcher, type SectionStat } from "./section-nav";
 import { ProgressRing } from "./progress-ring";
 import { SaveStatus } from "./save-status";
 import { ShortcutsPopover } from "./shortcuts-popover";
@@ -211,9 +213,13 @@ export function Annotator({ datasetId, adapter, initialImageId, backHref }: Prop
         await adapter.setImageStatus(current.id, status);
         const nextImages = images.map((im) => (im.id === current.id ? { ...im, status } : im));
         setImages(nextImages);
-        const after = nextImages.findIndex((im, i) => i > index && (im.status === "unlabeled" || im.status === "in_progress"));
-        const before = nextImages.findIndex((im) => im.status === "unlabeled" || im.status === "in_progress");
-        const next = after >= 0 ? after : before >= 0 ? before : index + 1 < images.length ? index + 1 : index;
+        // Stay inside the current section; when it is finished the "Proceed to Section N" prompt takes over.
+        const sec = sectionOf(current.number);
+        const open = (im: ImageRecord) => sectionOf(im.number) === sec && (im.status === "unlabeled" || im.status === "in_progress");
+        const after = nextImages.findIndex((im, i) => i > index && open(im));
+        const before = nextImages.findIndex(open);
+        const stepInSection = index + 1 < images.length && sectionOf(images[index + 1].number) === sec ? index + 1 : index;
+        const next = after >= 0 ? after : before >= 0 ? before : stepInSection;
         if (next !== index) setIndex(next);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not update status");
@@ -314,6 +320,28 @@ export function Annotator({ datasetId, adapter, initialImageId, backHref }: Prop
   const selectedBox = state.boxes.find((b) => b.id === state.selectedId);
   const activeClass = classes.find((c) => c.id === (selectedBox?.classId ?? activeClassId));
   const doneCount = images.filter((i) => i.status === "done" || i.status === "skipped").length;
+  const sectionStats = useMemo<SectionStat[]>(
+    () =>
+      groupBySection(images).map((g) => ({
+        section: g.section,
+        total: g.items.length,
+        finished: g.items.filter((i) => i.status === "done" || i.status === "skipped").length,
+        first: g.items[0].name,
+        last: g.items[g.items.length - 1].name,
+        openId: (g.items.find((i) => i.status === "unlabeled" || i.status === "in_progress") ?? g.items[0]).id,
+      })),
+    [images],
+  );
+  const sectionIndex = current ? Math.max(0, sectionStats.findIndex((x) => x.section === sectionOf(current.number))) : 0;
+  const currentSection = current ? sectionOf(current.number) : -1;
+  const sectionImages = useMemo(
+    () => (currentSection < 0 ? images : images.filter((im) => sectionOf(im.number) === currentSection)),
+    [images, currentSection],
+  );
+  const goSection = (i: number) => {
+    const s = sectionStats[i];
+    if (s) open(s.openId);
+  };
 
   if (!session && !error) return <WorkspaceSkeleton />;
   if (!session)
@@ -455,7 +483,9 @@ export function Annotator({ datasetId, adapter, initialImageId, backHref }: Prop
       <div className="flex min-h-0 flex-1">
         {/* Left rail: images */}
         <aside className="hidden w-72 shrink-0 flex-col border-r border-border bg-card lg:flex" aria-label="Images in this dataset">
-          <ImageList images={images} currentId={current?.id ?? null} onOpen={open} loadThumbnails={adapter.thumbnailUrls} />
+          <SectionSwitcher stats={sectionStats} index={sectionIndex} onGo={goSection} />
+          <ImageList images={sectionImages} currentId={current?.id ?? null} onOpen={open} loadThumbnails={adapter.thumbnailUrls} />
+          <SectionFooter stats={sectionStats} index={sectionIndex} onGo={goSection} />
         </aside>
 
         {/* Center: canvas */}
@@ -539,6 +569,12 @@ export function Annotator({ datasetId, adapter, initialImageId, backHref }: Prop
                 </span>
               </div>
             )}
+            <SectionCompleteCard
+              stats={sectionStats}
+              index={sectionIndex}
+              onGo={goSection}
+              exportHref={session.isAdmin ? `/admin/d/${datasetId}?tab=export` : null}
+            />
           </div>
         </main>
 
@@ -581,7 +617,6 @@ export function Annotator({ datasetId, adapter, initialImageId, backHref }: Prop
             </Button>
             <Button size="lg" disabled={!ready} loading={finishing} onClick={() => void finish("done")} title="Mark done and go next (Enter)">
               {!finishing && <Check />} Done and next
-              <Kbd className="ml-1 border-primary-foreground bg-primary text-primary-foreground [box-shadow:none]">Enter</Kbd>
             </Button>
           </div>
         </aside>

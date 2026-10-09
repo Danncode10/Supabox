@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fail, ok, requireAdmin } from "@/lib/supabase/api";
 import { IMAGE_BUCKET } from "@/lib/types";
+import { thumbPathOf } from "@/lib/thumbs";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -34,7 +35,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     return fail(500, "reset_failed", error.message);
   }
 
-  const paths = (data as string[] | null) ?? [];
+  const imagePaths = (data as string[] | null) ?? [];
+  const paths = imagePaths.flatMap((p) => [p, thumbPathOf(p)]);
   const admin = createAdminClient();
   let removed = 0;
   for (let i = 0; i < paths.length; i += 100) {
@@ -43,5 +45,5 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     if (rmErr) return fail(500, "storage_cleanup_failed", `Database reset, but storage cleanup failed: ${rmErr.message}`);
     removed += gone?.length ?? 0;
   }
-  return ok({ datasetId: id, imagesRemoved: paths.length, objectsRemoved: removed });
+  return ok({ datasetId: id, imagesRemoved: imagePaths.length, objectsRemoved: removed });
 }
