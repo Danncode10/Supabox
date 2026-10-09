@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronRight, Download, Images, ScanSearch, SearchX, Settings, Tags, Type, Upload, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Download, Images, FlaskConical, ScanSearch, SearchX, Settings, Tags, Type, Upload, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { DatasetStatus, ImageStatus } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -20,6 +20,7 @@ import { ExportPanel } from "./export-panel";
 import { ImageGallery, type StatusCounts } from "./image-gallery";
 import { NamingEditor } from "./naming-editor";
 import { ResetPanel } from "./reset-panel";
+import { TestPanel } from "./test-panel";
 import { UploadDropzone, UploadNote, UploadQueue } from "./uploader";
 import { ACCEPT_ATTR, pickImages, useUploader } from "./use-uploader";
 
@@ -275,6 +276,7 @@ export function DatasetAdmin({
               { key: "classes", label: "Classes", icon: Tags, n: classCount },
               { key: "naming", label: "Naming", icon: Type, n: null },
               { key: "export", label: "Export", icon: Download, n: null },
+              { key: "test", label: "Testing", icon: FlaskConical, n: null },
               { key: "settings", label: "Settings", icon: Settings, n: null },
             ] as const
           ).map((t) => (
@@ -373,6 +375,10 @@ export function DatasetAdmin({
             lastExportedAt={ds.last_exported_at}
             onChanged={load}
           />
+        </TabsContent>
+
+        <TabsContent value="test">
+          {tab === "test" && <TestPanel datasetId={ds.id} datasetName={ds.name} />}
         </TabsContent>
 
         <TabsContent value="settings" className="flex max-w-2xl flex-col gap-6">

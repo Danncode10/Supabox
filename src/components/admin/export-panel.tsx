@@ -38,7 +38,7 @@ function TreeRow({ depth, dir, name, note }: { depth: number; dir?: boolean; nam
   );
 }
 
-function CopyLine({ text }: { text: string }) {
+export function CopyLine({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border bg-background py-1 pl-4 pr-1">

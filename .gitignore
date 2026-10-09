@@ -42,3 +42,9 @@ next-env.d.ts
 
 # inspirations
 /inspirations
+
+# local YOLO training runs and models (scripts/train_local.py)
+/models
+
+# local python env for scripts/train_local.py
+/.venv
