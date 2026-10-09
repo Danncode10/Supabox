@@ -52,11 +52,11 @@ export function ClassPicker({ classes, activeId, onPick }: Props) {
                 onClick={() => onPick(c.id)}
                 className={cn(
                   "flex min-h-12 w-full items-center gap-3 rounded-xl border px-3 text-left text-base outline-none transition-[transform,background-color,border-color] duration-150 ease-out-strong focus-visible:ring-[3px] focus-visible:ring-ring active:scale-[0.98]",
-                  active ? "border-primary/60 bg-primary/10 font-semibold" : "border-border hover:bg-accent",
+                  active ? "border-primary bg-accent font-semibold" : "border-border hover:bg-accent",
                 )}
               >
                 <span
-                  className="size-6 shrink-0 rounded-full ring-2 ring-foreground/15 ring-offset-2 ring-offset-popover"
+                  className="size-6 shrink-0 rounded-full ring-2 ring-border"
                   style={{ background: c.color }}
                   aria-hidden="true"
                 />

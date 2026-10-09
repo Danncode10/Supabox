@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState } from "react";
 import { Annotator } from "@/components/annotator/annotator";
-import { createMemoryAdapter } from "@/components/annotator/memory-adapter";
+import { createSupabaseAdapter } from "@/components/annotator/supabase-adapter";
 
-/** Swap createMemoryAdapter for the supabase-backed adapter once the backend lands. */
+/** Binds the annotator to Supabase (RLS as the signed-in user). One adapter per mount keeps its URL cache. */
 export function LabelClient({ datasetId, imageId }: { datasetId: string; imageId?: string }) {
-  const adapter = useMemo(() => createMemoryAdapter(), []);
-  return <Annotator datasetId={datasetId} adapter={adapter} initialImageId={imageId} backHref={`/d/${datasetId}`} />;
+  const [adapter] = useState(createSupabaseAdapter);
+  return <Annotator key={datasetId} datasetId={datasetId} adapter={adapter} initialImageId={imageId} />;
 }

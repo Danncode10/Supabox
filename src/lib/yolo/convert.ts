@@ -27,7 +27,11 @@ export function boxToYoloLine(box: BoxXYWH, classIndex: number): string | null {
   if (!Number.isInteger(classIndex) || classIndex < 0) return null;
   const b = normalizeBox(box);
   if (!b) return null;
-  return `${classIndex} ${fmt(b.x)} ${fmt(b.y)} ${fmt(b.w)} ${fmt(b.h)}`;
+  const w = fmt(b.w);
+  const h = fmt(b.h);
+  // Sub-pixel boxes that round to zero size are useless to YOLO; drop them.
+  if (Number(w) === 0 || Number(h) === 0) return null;
+  return `${classIndex} ${fmt(b.x)} ${fmt(b.y)} ${w} ${h}`;
 }
 
 /**

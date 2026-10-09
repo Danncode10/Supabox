@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import "@/lib/yolo-supabase";
 import { getExportBackend } from "@/lib/yolo/backend";
-import { planExport } from "@/lib/yolo/build";
+import { planExport, type ExportStatusFilter } from "@/lib/yolo/build";
 import { zipStream } from "@/lib/yolo/zip";
 import type { ApiError } from "@/lib/types";
 
@@ -34,8 +34,13 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ dataset
   const name = await backend.getDatasetName(datasetId);
   if (name === null) return fail(404, "not_found", "Dataset not found");
 
-  // Optional ?val=0.2&test=0.1&seed=7 ; train is the remainder.
+  // Optional ?status=done|all&val=0.2&test=0.1&seed=7 ; train is the remainder.
   const sp = request.nextUrl.searchParams;
+  const statusParam = sp.get("status") || "done";
+  if (statusParam !== "done" && statusParam !== "all") {
+    return fail(422, "invalid_params", "status must be done or all");
+  }
+  const status: ExportStatusFilter = statusParam;
   const val = parseNum(sp.get("val"));
   const test = parseNum(sp.get("test"));
   const seed = parseNum(sp.get("seed"));
@@ -47,8 +52,11 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ dataset
   const plan = await planExport(datasetId, backend, {
     ratios: { train: 1 - v - t, val: v, test: t },
     seed: seed ?? undefined,
+    status,
   });
-  if (plan.imageCount === 0) return fail(409, "nothing_to_export", "No images are marked done");
+  if (plan.imageCount === 0) {
+    return fail(409, "nothing_to_export", status === "done" ? "No images are marked done" : "No exportable images");
+  }
 
   const body = zipStream(plan.entries);
   // Mark exported once the stream has been fully handed to the client.
@@ -67,6 +75,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ dataset
       "Cache-Control": "no-store",
       "X-Export-Images": String(plan.imageCount),
       "X-Export-Labels": String(plan.labelCount),
+      "X-Export-Status": status,
     },
   });
 }

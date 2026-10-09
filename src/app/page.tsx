@@ -1,76 +1,37 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Boxes,
-  Download,
-  Gauge,
-  Images,
-  ScanSearch,
-  Settings2,
-  Smartphone,
-  Tags,
-} from "lucide-react";
+import { ArrowRight, Images, Plus, ScanSearch, Settings2, Upload } from "lucide-react";
 
-import { AnimatedGradientText } from "@/components/ui/animated-gradient-text";
+import { getDatasetSummaries, pctDone, statusVariant, type DatasetSummary } from "@/components/admin/dataset-stats";
+import { SignOutButton } from "@/components/admin/sign-out-button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { BlurFade } from "@/components/ui/blur-fade";
-import { BorderBeam } from "@/components/ui/border-beam";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { GridPattern } from "@/components/ui/grid-pattern";
-import { Marquee } from "@/components/ui/marquee";
-import { Meteors } from "@/components/ui/meteors";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/server";
 
-const FEATURES = [
-  {
-    icon: Smartphone,
-    title: "Built for thumbs",
-    body: "Draw, nudge and relabel boxes on a phone with 48px targets and pinch zoom.",
-  },
-  {
-    icon: Tags,
-    title: "Contiguous classes",
-    body: "Class indices stay 0..N-1 so every export drops straight into YOLOv8 training.",
-  },
-  {
-    icon: Gauge,
-    title: "Free-tier aware",
-    body: "Live storage and database meters warn you before uploads are blocked.",
-  },
-] as const;
-
-const TAGS = [
-  "YOLOv8 export",
-  "Supabase Storage",
-  "Row level security",
-  "Email code sign-in",
-  "Touch-first canvas",
-  "Image compression",
-  "Per-dataset naming",
-  "Progress tracking",
-];
-
-/** Brand mark: signal square with a corner-bracket crop. */
 function Logo() {
   return (
-    <Link href="/" className="flex items-center gap-2.5 rounded-lg outline-none focus-visible:ring-[3px] focus-visible:ring-ring">
+    <Link
+      href="/"
+      className="flex min-h-12 items-center gap-2 rounded-lg outline-none focus-visible:ring-[3px] focus-visible:ring-ring"
+    >
       <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground [box-shadow:var(--inset-highlight),var(--elev-xs)]">
-        <ScanSearch className="size-4.5" aria-hidden />
+        <ScanSearch className="size-4" aria-hidden />
       </span>
       <span className="text-base font-semibold tracking-tight">Supabox</span>
     </Link>
   );
 }
 
-async function HeaderActions() {
+async function AdminEntry() {
   const supabase = await createClient();
   const { data: isAdmin } = await supabase.rpc("is_admin");
   if (!isAdmin) return null;
   return (
-    <Button asChild variant="outline" size="default">
+    <Button asChild variant="outline" size="lg" className="md:h-10 md:px-4 md:text-sm">
       <Link href="/admin">
         <Settings2 aria-hidden />
         Admin
@@ -79,222 +40,175 @@ async function HeaderActions() {
   );
 }
 
-/** Static annotation mock: decorative only. */
-function CanvasPreview() {
+function DatasetRow({ d, isAdmin, primary }: { d: DatasetSummary; isAdmin: boolean; primary: boolean }) {
+  const pct = pctDone(d);
+  const remaining = d.total - d.done;
+  const empty = d.total === 0;
+  const complete = !empty && remaining === 0;
+
   return (
-    <div
-      aria-hidden
-      className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-border bg-card [box-shadow:var(--inset-highlight),var(--elev-lg)]"
-    >
-      <GridPattern
-        width={28}
-        height={28}
-        className="mask-[linear-gradient(to_bottom,white,transparent_85%)] fill-transparent stroke-foreground/8"
-      />
-      <div className="absolute inset-x-0 bottom-0 h-1/3 bg-linear-to-t from-primary/10 to-transparent" />
-
-      <div className="absolute left-[8%] top-[22%] h-[44%] w-[38%] rounded-md border-2 border-primary bg-primary/10">
-        <span className="absolute -top-6 left-[-2px] rounded-sm bg-primary px-1.5 py-0.5 font-mono text-[11px] font-medium text-primary-foreground">
-          0 car 0.94
-        </span>
-      </div>
-      <div className="absolute right-[10%] top-[14%] h-[30%] w-[26%] rounded-md border-2 border-info bg-info/10">
-        <span className="absolute -top-6 left-[-2px] rounded-sm bg-info px-1.5 py-0.5 font-mono text-[11px] font-medium text-info-foreground">
-          1 sign 0.88
-        </span>
-      </div>
-      <div className="absolute bottom-[12%] right-[18%] h-[26%] w-[30%] rounded-md border-2 border-warning bg-warning/10">
-        <span className="absolute -top-6 left-[-2px] rounded-sm bg-warning px-1.5 py-0.5 font-mono text-[11px] font-medium text-warning-foreground">
-          2 cone 0.91
-        </span>
+    <li className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,16rem)_auto] sm:items-center sm:gap-6 sm:px-6">
+      <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <h3 className="truncate text-base font-semibold tracking-tight">{d.name}</h3>
+          <Badge variant={statusVariant(d.status)} dot>
+            {d.status}
+          </Badge>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {empty
+            ? "No images uploaded yet"
+            : complete
+              ? "Every image is labeled"
+              : `${remaining.toLocaleString("en-US")} image${remaining === 1 ? "" : "s"} left to label`}
+        </p>
       </div>
 
-      <div className="absolute inset-x-3 bottom-3 flex items-center justify-between rounded-lg border border-border bg-popover/90 px-3 py-2 backdrop-blur-sm">
-        <span className="font-mono text-xs text-muted-foreground tabular-nums">image_0042.jpg</span>
-        <Badge variant="success" dot>3 boxes</Badge>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between gap-2 text-sm">
+          <span className="font-mono tabular-nums">
+            {d.done.toLocaleString("en-US")}
+            <span className="text-muted-foreground"> / {d.total.toLocaleString("en-US")}</span>
+          </span>
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">{pct}%</span>
+        </div>
+        <Progress value={pct} tone={complete ? "success" : "primary"} aria-label={`${d.name} labeled`} />
       </div>
-      <BorderBeam size={120} duration={9} borderWidth={1.5} />
-    </div>
+
+      <div className="flex gap-2">
+        {empty && isAdmin ? (
+          <Button asChild size="lg" variant={primary ? "default" : "outline"} className="flex-1 sm:flex-none md:h-10">
+            <Link href={`/admin/d/${d.id}?tab=images&upload=1`}>
+              <Upload aria-hidden />
+              Upload images
+            </Link>
+          </Button>
+        ) : empty ? (
+          <Button size="lg" variant="outline" disabled className="flex-1 sm:flex-none md:h-10">
+            Waiting for images
+          </Button>
+        ) : (
+          <Button asChild size="lg" variant={primary ? "default" : "outline"} className="flex-1 sm:flex-none md:h-10">
+            <Link href={`/label/${d.id}`}>
+              {complete ? "Review" : d.done > 0 || d.inProgress > 0 ? "Continue labeling" : "Start labeling"}
+              <ArrowRight aria-hidden />
+            </Link>
+          </Button>
+        )}
+        {isAdmin && !empty && (
+          <Button asChild size="icon-lg" variant="ghost" className="md:size-10">
+            <Link href={`/admin/d/${d.id}`} aria-label={`Manage ${d.name}`}>
+              <Settings2 aria-hidden />
+            </Link>
+          </Button>
+        )}
+      </div>
+    </li>
   );
 }
 
-async function DatasetPicker() {
+async function Datasets() {
   const supabase = await createClient();
-  const { data: datasets, error } = await supabase
-    .from("datasets")
-    .select("id, name, status")
-    .order("created_at", { ascending: false });
+  const [{ data: isAdminRaw }, { data: datasets, error }] = await Promise.all([
+    supabase.rpc("is_admin"),
+    getDatasetSummaries(supabase),
+  ]);
+  const isAdmin = Boolean(isAdminRaw);
 
   if (error) {
     return (
-      <EmptyState
-        icon={<Boxes />}
-        title="Could not load datasets"
-        description={error.message}
-      />
+      <Alert variant="danger">
+        <AlertTitle>Could not load datasets</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
     );
   }
 
-  if (!datasets || datasets.length === 0) {
+  if (datasets.length === 0) {
     return (
       <EmptyState
         icon={<Images />}
         title="No datasets yet"
-        description="An admin needs to create a dataset and upload images before labeling can start."
+        description={
+          isAdmin
+            ? "Create a dataset, drop in your images, and they show up here ready to label."
+            : "An admin needs to create a dataset and upload images before labeling can start."
+        }
+        action={
+          isAdmin && (
+            <Button asChild size="lg">
+              <Link href="/admin?new=1">
+                <Plus aria-hidden />
+                New dataset
+              </Link>
+            </Button>
+          )
+        }
       />
     );
   }
 
-  return (
-    <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {datasets.map((d, i) => (
-        <li key={d.id}>
-          <BlurFade delay={i * 0.05}>
-            <Link
-              href={`/label/${d.id}`}
-              className="group flex min-h-20 items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 outline-none transition-[transform,background-color,border-color] duration-150 ease-out-strong [box-shadow:var(--inset-highlight),var(--elev-xs)] hover:border-input hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring active:scale-[0.98]"
-            >
-              <span className="flex min-w-0 flex-col gap-1.5">
-                <span className="truncate text-base font-semibold tracking-tight">{d.name}</span>
-                <Badge
-                  variant={d.status === "active" ? "success" : d.status === "exported" ? "info" : "neutral"}
-                  dot
-                  pulse={d.status === "active"}
-                >
-                  {d.status}
-                </Badge>
-              </span>
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary text-muted-foreground transition-colors duration-150 group-hover:bg-primary group-hover:text-primary-foreground">
-                <ArrowRight className="size-4" aria-hidden />
-              </span>
-            </Link>
-          </BlurFade>
-        </li>
-      ))}
-    </ul>
-  );
-}
+  const totals = datasets.reduce((a, d) => ({ done: a.done + d.done, total: a.total + d.total }), { done: 0, total: 0 });
+  // The first dataset with work left gets the primary action.
+  const primaryId = datasets.find((d) => d.total > d.done)?.id ?? datasets[0].id;
 
-function DatasetPickerSkeleton() {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-busy>
-      {[0, 1, 2].map((i) => (
-        <Skeleton key={i} className="h-20 rounded-xl" />
-      ))}
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        <span className="font-mono tabular-nums text-foreground">{totals.done.toLocaleString("en-US")}</span> of{" "}
+        <span className="font-mono tabular-nums text-foreground">{totals.total.toLocaleString("en-US")}</span> images labeled
+        across {datasets.length} dataset{datasets.length === 1 ? "" : "s"}
+      </p>
+      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card [box-shadow:var(--inset-highlight),var(--elev-xs)]">
+        {datasets.map((d) => (
+          <DatasetRow key={d.id} d={d} isAdmin={isAdmin} primary={d.id === primaryId} />
+        ))}
+      </ul>
     </div>
   );
 }
 
-export const instant = false;
-
-export default async function Home() {
+function DatasetsSkeleton() {
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden">
-      {/* Backdrop */}
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-160 overflow-hidden">
-        <GridPattern
-          width={44}
-          height={44}
-          className="mask-[radial-gradient(ellipse_70%_60%_at_50%_0%,white,transparent)] fill-transparent stroke-foreground/6"
-        />
-        <div className="absolute left-1/2 top-[-12rem] size-[36rem] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
-        <Meteors number={10} />
+    <div className="flex flex-col gap-4" aria-busy aria-label="Loading datasets">
+      <Skeleton className="h-5 w-64" />
+      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="grid gap-4 px-4 py-4 sm:grid-cols-[1fr_14rem_10rem] sm:items-center sm:px-6">
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+            <Skeleton className="h-6" />
+            <Skeleton className="h-12 md:h-10" />
+          </div>
+        ))}
       </div>
+    </div>
+  );
+}
 
-      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-        <Logo />
-        <Suspense fallback={<Skeleton className="h-10 w-24 rounded-lg" />}>
-          <HeaderActions />
-        </Suspense>
+export default function Home() {
+  return (
+    <div className="flex flex-1 flex-col">
+      <header className="border-b border-border">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-2 sm:px-6">
+          <Logo />
+          <div className="flex items-center gap-2">
+            <Suspense fallback={<Skeleton className="h-12 w-24 rounded-lg md:h-10" />}>
+              <AdminEntry />
+            </Suspense>
+            <SignOutButton compact />
+          </div>
+        </div>
       </header>
 
-      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col gap-20 px-4 pb-20 pt-8 sm:px-6 md:pt-16">
-        {/* Hero */}
-        <section className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]" aria-labelledby="hero-h">
-          <div className="flex flex-col items-start gap-6">
-            <BlurFade>
-              <Badge variant="default" dot pulse>
-                YOLO annotation, on any device
-              </Badge>
-            </BlurFade>
-            <BlurFade delay={0.05}>
-              <h1 id="hero-h" className="text-balance text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
-                Label images fast.
-                <br />
-                Ship <AnimatedGradientText>training-ready</AnimatedGradientText> datasets.
-              </h1>
-            </BlurFade>
-            <BlurFade delay={0.1}>
-              <p className="max-w-xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
-                Supabox is a small team annotation workspace. Upload photos, draw boxes with your thumbs,
-                track progress and export a clean YOLOv8 ZIP, all inside the Supabase free tier.
-              </p>
-            </BlurFade>
-            <BlurFade delay={0.15} className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-              <Button asChild size="lg" className="w-full sm:w-auto">
-                <a href="#datasets">
-                  Start labeling
-                  <ArrowRight aria-hidden />
-                </a>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
-                <a href="#how">
-                  <Download aria-hidden />
-                  How it works
-                </a>
-              </Button>
-            </BlurFade>
-          </div>
-
-          <BlurFade delay={0.2} direction="left" offset={12}>
-            <CanvasPreview />
-          </BlurFade>
-        </section>
-
-        {/* Datasets */}
-        <section id="datasets" className="flex scroll-mt-8 flex-col gap-5" aria-labelledby="ds-h">
-          <div className="flex flex-col gap-1">
-            <h2 id="ds-h" className="text-2xl font-semibold tracking-tight">Pick a dataset</h2>
-            <p className="text-sm text-muted-foreground">Open one to continue where the queue left off.</p>
-          </div>
-          <Suspense fallback={<DatasetPickerSkeleton />}>
-            <DatasetPicker />
-          </Suspense>
-        </section>
-
-        {/* Features */}
-        <section id="how" className="flex scroll-mt-8 flex-col gap-8" aria-labelledby="how-h">
-          <h2 id="how-h" className="text-2xl font-semibold tracking-tight">From phone to training run</h2>
-          <ul className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-3">
-            {FEATURES.map((f, i) => (
-              <li key={f.title} className="bg-card p-6">
-                <BlurFade delay={i * 0.06} inView className="flex flex-col gap-3">
-                  <span className="grid size-10 place-items-center rounded-lg bg-primary/12 text-primary">
-                    <f.icon className="size-5" aria-hidden />
-                  </span>
-                  <h3 className="text-base font-semibold tracking-tight">{f.title}</h3>
-                  <p className="text-sm leading-relaxed text-muted-foreground">{f.body}</p>
-                </BlurFade>
-              </li>
-            ))}
-          </ul>
-
-          <Marquee pauseOnHover className="[--duration:36s] [--gap:0.75rem] mask-[linear-gradient(to_right,transparent,white_12%,white_88%,transparent)]">
-            {TAGS.map((t) => (
-              <Badge key={t} variant="outline" className="px-3 py-1.5 text-sm">
-                {t}
-              </Badge>
-            ))}
-          </Marquee>
-        </section>
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 md:py-12">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Datasets</h1>
+        <Suspense fallback={<DatasetsSkeleton />}>
+          <Datasets />
+        </Suspense>
       </main>
-
-      <footer className="relative z-10 border-t border-border">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-6 text-sm text-muted-foreground sm:px-6">
-          <span>Supabox</span>
-          <span className="font-mono text-xs">YOLOv8 / Supabase</span>
-        </div>
-      </footer>
     </div>
   );
 }

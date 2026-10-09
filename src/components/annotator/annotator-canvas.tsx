@@ -34,6 +34,8 @@ interface Props {
   onCheckpoint: () => void;
   onChange: (boxes: DraftBox[]) => void;
   onCreate: (box: { x: number; y: number; w: number; h: number }) => void;
+  /** Show crosshair guides under a mouse pointer (desktop). */
+  crosshair?: boolean;
 }
 
 type Gesture =
@@ -41,7 +43,8 @@ type Gesture =
   | { kind: "draw"; start: { x: number; y: number }; cur: { x: number; y: number } }
   | { kind: "move"; id: string; start: DraftBox; from: { x: number; y: number }; checkpointed: boolean }
   | { kind: "resize"; id: string; handle: Handle; start: DraftBox; checkpointed: boolean }
-  | { kind: "pinch"; d0: number; mid0: { x: number; y: number }; v0: View };
+  | { kind: "pinch"; d0: number; mid0: { x: number; y: number }; v0: View }
+  | { kind: "pan"; from: { x: number; y: number }; v0: View };
 
 const HANDLES: Handle[] = ["tl", "tr", "bl", "br"];
 const HIT = 44; // px, handle hit area
@@ -51,6 +54,11 @@ export function AnnotatorCanvas(p: Props) {
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [rawView, setView] = useState<View>({ scale: 1, tx: 0, ty: 0 });
   const [draft, setDraft] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const [panning, setPanning] = useState(false);
+  const spaceRef = useRef(false);
+  const crossX = useRef<HTMLDivElement>(null);
+  const crossY = useRef<HTMLDivElement>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<Gesture>({ kind: "none" });
   const rect = useMemo(() => fitRect(size, p.imageWidth, p.imageHeight), [size, p.imageWidth, p.imageHeight]);
@@ -92,6 +100,60 @@ export function AnnotatorCanvas(p: Props) {
     return () => el.removeEventListener("wheel", onWheel);
   }, [zoomAt]);
 
+  // Desktop keys owned by the canvas: hold Space to pan, +/- to zoom, 0 to fit.
+  useEffect(() => {
+    const typing = (t: EventTarget | null) =>
+      t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+    const release = () => {
+      spaceRef.current = false;
+      setSpaceHeld(false);
+    };
+    const onDown = (e: KeyboardEvent) => {
+      if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === " ") {
+        // A control reached by keyboard keeps Space for activation.
+        const t = e.target;
+        if (!spaceRef.current && t instanceof HTMLElement && t !== document.body && t !== ref.current && t.matches(":focus-visible")) return;
+        // Otherwise stop Space from clicking a mouse-focused button or scrolling.
+        e.preventDefault();
+        if (!spaceRef.current) {
+          spaceRef.current = true;
+          setSpaceHeld(true);
+        }
+        return;
+      }
+      const { w, h } = live.current.size;
+      if (e.key === "+" || e.key === "=") zoomAt(1.25, w / 2, h / 2);
+      else if (e.key === "-" || e.key === "_") zoomAt(1 / 1.25, w / 2, h / 2);
+      else if (e.key === "0") setView({ scale: 1, tx: 0, ty: 0 });
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.key !== " ") return;
+      if (spaceRef.current) e.preventDefault();
+      release();
+    };
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", release);
+    };
+  }, [zoomAt]);
+
+  const moveCrosshair = (pt: { x: number; y: number } | null) => {
+    const show = pt && live.current.crosshair && !spaceRef.current;
+    if (crossX.current) {
+      crossX.current.style.opacity = show ? "1" : "0";
+      if (pt) crossX.current.style.transform = `translateY(${pt.y}px)`;
+    }
+    if (crossY.current) {
+      crossY.current.style.opacity = show ? "1" : "0";
+      if (pt) crossY.current.style.transform = `translateX(${pt.x}px)`;
+    }
+  };
+
   const local = (e: React.PointerEvent) => {
     const r = ref.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -109,12 +171,20 @@ export function AnnotatorCanvas(p: Props) {
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const middle = e.pointerType === "mouse" && e.button === 1;
+    if (e.pointerType === "mouse" && e.button !== 0 && !middle) return;
+    if (middle) e.preventDefault(); // no autoscroll
     const pt = local(e);
     pointers.current.set(e.pointerId, pt);
     ref.current!.setPointerCapture(e.pointerId);
     if (pointers.current.size === 2) return startPinch();
     if (pointers.current.size > 2) return;
+    if (middle || spaceRef.current) {
+      gesture.current = { kind: "pan", from: pt, v0: live.current.view };
+      setPanning(true);
+      moveCrosshair(null);
+      return;
+    }
 
     const { view: v, boxes, onSelect } = live.current;
     const target = e.target as HTMLElement;
@@ -137,12 +207,18 @@ export function AnnotatorCanvas(p: Props) {
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!pointers.current.has(e.pointerId)) return;
     const pt = local(e);
+    if (e.pointerType === "mouse" && gesture.current.kind !== "pan") moveCrosshair(pt);
+    if (!pointers.current.has(e.pointerId)) return;
     pointers.current.set(e.pointerId, pt);
     const g = gesture.current;
     const { view: v, size: sz, boxes, onChange, onCheckpoint } = live.current;
     const rc = rectRef.current;
+
+    if (g.kind === "pan") {
+      setView(clampView({ scale: g.v0.scale, tx: g.v0.tx + pt.x - g.from.x, ty: g.v0.ty + pt.y - g.from.y }, sz, rc));
+      return;
+    }
 
     if (g.kind === "pinch" && pointers.current.size >= 2) {
       const [a, b] = [...pointers.current.values()];
@@ -177,6 +253,10 @@ export function AnnotatorCanvas(p: Props) {
       return;
     }
     gesture.current = { kind: "none" };
+    if (g.kind === "pan") {
+      setPanning(false);
+      return;
+    }
     if (g.kind === "draw") {
       setDraft(null);
       if (cancelled) return;
@@ -203,17 +283,23 @@ export function AnnotatorCanvas(p: Props) {
     return { left: a.x, top: a.y, width: b.x - a.x, height: b.y - a.y };
   };
   const zoomBtn =
-    "grid h-11 w-11 place-items-center font-mono text-xs font-medium tabular-nums text-foreground outline-none transition-[background-color,opacity] duration-150 hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring active:bg-accent disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4";
+    "grid size-12 place-items-center font-mono text-xs font-medium tabular-nums text-foreground outline-none transition-[background-color,opacity] duration-150 hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring active:bg-accent disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4";
 
   return (
     <div
       ref={ref}
       role="application"
-      aria-label={`Annotation canvas for ${p.imageLabel}. Drag on the image to draw a box. Use the box list to edit boxes with the keyboard.`}
-      className="relative h-full w-full touch-none select-none overflow-hidden overscroll-contain bg-muted"
+      aria-label={`Annotation canvas for ${p.imageLabel}. Drag on the image to draw a box. Hold Space and drag to pan. Use the box list to edit boxes with the keyboard.`}
+      className={cn(
+        "relative h-full w-full touch-none select-none overflow-hidden overscroll-contain bg-muted",
+        p.crosshair && "cursor-crosshair",
+        spaceHeld && (panning ? "cursor-grabbing [&_*]:cursor-grabbing!" : "cursor-grab [&_*]:cursor-grab!"),
+        !spaceHeld && panning && "cursor-grabbing [&_*]:cursor-grabbing!",
+      )}
       style={{ touchAction: "none" }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
+      onPointerLeave={() => moveCrosshair(null)}
       onPointerUp={(e) => end(e, false)}
       onPointerCancel={(e) => end(e, true)}
       onLostPointerCapture={(e) => end(e, true)}
@@ -290,6 +376,21 @@ export function AnnotatorCanvas(p: Props) {
           );
         })}
 
+      {p.crosshair && (
+        <>
+          <div
+            ref={crossX}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-px bg-foreground opacity-0 mix-blend-difference"
+          />
+          <div
+            ref={crossY}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-0 w-px bg-foreground opacity-0 mix-blend-difference"
+          />
+        </>
+      )}
+
       {draft && (
         <div
           className="pointer-events-none absolute rounded-[3px] border-2 border-dashed border-primary bg-primary/12 [box-shadow:0_0_0_1px_rgb(0_0_0/0.45)]"
@@ -298,7 +399,7 @@ export function AnnotatorCanvas(p: Props) {
       )}
 
       <div
-        className="absolute bottom-3 right-3 flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-popover/75 backdrop-blur-xl [box-shadow:var(--inset-highlight),var(--elev-md)]"
+        className="absolute bottom-3 right-3 flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-popover [box-shadow:var(--inset-highlight),var(--elev-md)]"
         onPointerDown={(e) => e.stopPropagation()}
       >
         <button type="button" aria-label="Zoom in" className={zoomBtn} onClick={() => zoomAt(1.5, size.w / 2, size.h / 2)}>

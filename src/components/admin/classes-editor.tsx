@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const PALETTE = ["#ff5a5f", "#2f80ed", "#27ae60", "#f2994a", "#9b51e0", "#00b8d9", "#eb5757", "#8d6e63"];
 
-export function ClassesEditor({ datasetId }: { datasetId: string }) {
+export function ClassesEditor({ datasetId, onChanged }: { datasetId: string; onChanged?: (count: number) => void }) {
   const [classes, setClasses] = useState<ClassDef[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [name, setName] = useState("");
@@ -25,7 +25,8 @@ export function ClassesEditor({ datasetId }: { datasetId: string }) {
     setLoaded(true);
     if (error) return setErr(error.message);
     setClasses(data.map((c) => ({ id: c.id, datasetId: c.dataset_id, name: c.name, index: c.idx, color: c.color })));
-  }, [datasetId]);
+    onChanged?.(data.length);
+  }, [datasetId, onChanged]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch
   useEffect(() => { void load(); }, [load]);
 

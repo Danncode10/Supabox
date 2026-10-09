@@ -3,12 +3,22 @@ import { fail, ok, requireAdmin } from "@/lib/supabase/api";
 import { FREE_TIER, IMAGE_BUCKET } from "@/lib/types";
 
 const EXTS = ["jpg", "jpeg", "png", "webp"];
+const MIME_EXT: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** ext wins when valid; otherwise fall back to the MIME type (files named without/with odd extensions). */
+function resolveExt(f: unknown): string {
+  const o = (f ?? {}) as { ext?: unknown; type?: unknown };
+  const ext = String(o.ext ?? "").toLowerCase().replace(/^\./, "");
+  if (EXTS.includes(ext)) return ext;
+  return MIME_EXT[String(o.type ?? "").toLowerCase()] ?? ext;
+}
 
 export type UploadUrl = { number: number; name: string; path: string; token: string; signedUrl: string };
 
 /**
- * POST { datasetId, files: [{ ext }] } -> ApiResult<UploadUrl[]>
+ * POST { datasetId, files: [{ ext, type? }] } -> ApiResult<UploadUrl[]>
+ * `type` (MIME) is an optional fallback when `ext` is missing or not one of jpg/jpeg/png/webp.
  * Atomically allocates image numbers, blocks when storage >= 95%, returns signed upload URLs.
  * Client then: supabase.storage.from("images").uploadToSignedUrl(path, token, blob), and
  * inserts the `images` row (admin RLS) with name/number/storage_path/width/height/bytes.
@@ -21,7 +31,7 @@ export async function POST(request: Request) {
   const files: unknown = body?.files;
   if (typeof datasetId !== "string" || !UUID_RE.test(datasetId)) return fail(422, "invalid_dataset", "datasetId required");
   if (!Array.isArray(files) || files.length < 1 || files.length > 200) return fail(422, "invalid_files", "1-200 files required");
-  const exts = files.map((f) => String(f?.ext ?? "").toLowerCase().replace(/^\./, ""));
+  const exts = files.map(resolveExt);
   if (exts.some((e) => !EXTS.includes(e))) return fail(422, "invalid_ext", `ext must be one of ${EXTS.join(", ")}`);
 
   const { data: usage } = await ctx.supabase.rpc("storage_usage");

@@ -40,6 +40,8 @@ export function createMemoryAdapter(): AnnotatorAdapter {
     async loadSession(datasetId) {
       await wait();
       return {
+        datasetName: "Demo dataset",
+        isAdmin: false,
         classes: classes.map((c) => ({ ...c, datasetId })),
         images: images.map((im) => ({ ...im, datasetId })),
       };
@@ -58,6 +60,14 @@ export function createMemoryAdapter(): AnnotatorAdapter {
       await wait();
       const im = images.find((x) => x.id === imageId);
       if (im) im.status = status;
+    },
+    async thumbnailUrls(ids) {
+      const out: Record<string, string> = {};
+      for (const id of ids) {
+        const i = images.findIndex((im) => im.id === id);
+        if (i >= 0) out[id] = svgFor(i, images[i].width, images[i].height);
+      }
+      return out;
     },
   };
 }

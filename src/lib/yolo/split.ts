@@ -57,15 +57,40 @@ export function assignSplits<T extends { number: number }>(
 }
 
 function yamlString(s: string): string {
-  // JSON strings are valid YAML double-quoted scalars.
+  // JSON strings are valid YAML double-quoted scalars (quotes, colons, '#', unicode all safe).
   return JSON.stringify(s);
 }
 
-/** data.yaml for Ultralytics YOLO. `names` must be ordered by class index (0..N-1). */
-export function buildDataYaml(names: readonly string[], hasTest: boolean): string {
-  const lines = ["path: .", "train: images/train", "val: images/val"];
-  if (hasTest) lines.push("test: images/test");
+export interface DataYamlOptions {
+  /** Emit `test: images/test`. Only set when the archive actually has test images. */
+  test?: boolean;
+  /**
+   * Folder used for `val`. "train" when no image landed in val (tiny datasets), because
+   * Ultralytics refuses to start when the val path does not exist.
+   */
+  val?: "val" | "train";
+}
+
+/**
+ * data.yaml for Ultralytics YOLO (v5/v8/11). `names` must be ordered by class index 0..N-1.
+ * `path: .` resolves against the working directory, so run `yolo detect train data=data.yaml`
+ * from the unzipped folder (or replace `.` with the absolute folder path).
+ */
+export function buildDataYaml(names: readonly string[], opts: boolean | DataYamlOptions = {}): string {
+  const o: DataYamlOptions = typeof opts === "boolean" ? { test: opts } : opts;
+  const lines = [
+    "# Exported by Supabox. Train from this folder: yolo detect train data=data.yaml model=yolov8n.pt",
+    "path: .",
+    "train: images/train",
+    `val: images/${o.val ?? "val"}`,
+  ];
+  if (o.test) lines.push("test: images/test");
+  lines.push("");
   lines.push(`nc: ${names.length}`);
-  lines.push(`names: [${names.map(yamlString).join(", ")}]`);
+  if (names.length === 0) lines.push("names: {}");
+  else {
+    lines.push("names:");
+    names.forEach((n, i) => lines.push(`  ${i}: ${yamlString(n)}`));
+  }
   return lines.join("\n") + "\n";
 }
