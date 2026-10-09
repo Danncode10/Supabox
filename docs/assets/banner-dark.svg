@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="560" viewBox="0 0 1280 560" role="img" aria-labelledby="t d">
+<title id="t">Supabox</title>
+<desc id="d">Label images on a phone, export YOLOv8 datasets and train in one click.</desc>
+<defs>
+  <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+    <path d="M32 0H0V32" fill="none" stroke="#f4f5f7" stroke-opacity="0.05" stroke-width="1"/>
+  </pattern>
+  <radialGradient id="glow" cx="0.78" cy="0.45" r="0.55">
+    <stop offset="0" stop-color="#c6f24e" stop-opacity="0.20"/>
+    <stop offset="1" stop-color="#c6f24e" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#0b0d10" stop-opacity="1"/>
+    <stop offset="0.45" stop-color="#0b0d10" stop-opacity="0.6"/>
+    <stop offset="1" stop-color="#0b0d10" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="photo" x1="0" y1="0" x2="0.4" y2="1">
+    <stop offset="0" stop-color="#2b3a2a"/>
+    <stop offset="1" stop-color="#1f2a22"/>
+  </linearGradient>
+  <clipPath id="screen"><rect x="880" y="78" width="252" height="420" rx="26"/></clipPath>
+  <filter id="shadow" x="-60%" y="-60%" width="220%" height="240%">
+    <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#000" flood-opacity="0.35"/>
+  </filter>
+</defs>
+<rect width="1280" height="560" rx="24" fill="#0b0d10"/>
+<rect width="1280" height="560" rx="24" fill="url(#grid)"/>
+<rect width="1280" height="560" rx="24" fill="url(#glow)"/>
+<rect width="760" height="560" fill="url(#fade)"/>
+<rect x="0.5" y="0.5" width="1279" height="559" rx="23.5" fill="none" stroke="#262a31"/>
+
+<!-- logo -->
+<g transform="translate(80 84)">
+  <rect width="44" height="44" rx="11" fill="#c6f24e"/>
+  <g fill="none" stroke="#1d2a06" stroke-width="2.6" stroke-linecap="round">
+    <path d="M12 18v-4a2 2 0 0 1 2-2h4M26 12h4a2 2 0 0 1 2 2v4M32 26v4a2 2 0 0 1-2 2h-4M18 32h-4a2 2 0 0 1-2-2v-4"/>
+  </g>
+  <circle cx="22" cy="22" r="3.2" fill="#1d2a06"/>
+  <text x="60" y="31" font-family="Geist, 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="26" font-weight="700" fill="#f4f5f7" letter-spacing="-0.5">Supabox</text>
+  <rect x="180" y="9" width="104" height="26" rx="13" fill="none" stroke="#262a31"/>
+  <text x="232" y="27" text-anchor="middle" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#9aa0a9">open source</text>
+</g>
+
+<!-- headline -->
+<text font-family="Geist, 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-weight="700" fill="#f4f5f7" font-size="56" letter-spacing="-2">
+  <tspan x="78" y="236">Label on any device.</tspan>
+  <tspan x="78" y="302">Train <tspan fill="#c6f24e">YOLO</tspan> in one click.</tspan>
+</text>
+<text font-family="Geist, 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="24" fill="#9aa0a9">
+  <tspan x="80" y="372">A self-hosted labeling studio for phone,</tspan>
+  <tspan x="80" y="406">tablet and laptop. Your servers, your data.</tspan>
+</text>
+
+<!-- chips -->
+<g font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#f4f5f7">
+  <g transform="translate(80 448)">
+    <rect width="152" height="34" rx="8" fill="#14171c" stroke="#262a31"/>
+    <circle cx="18" cy="17" r="4" fill="#c6f24e"/><text x="32" y="22">YOLOv8 export</text>
+  </g>
+  <g transform="translate(242 448)">
+    <rect width="180" height="34" rx="8" fill="#14171c" stroke="#262a31"/>
+    <circle cx="18" cy="17" r="4" fill="#5aa9ff"/><text x="32" y="22">one-click training</text>
+  </g>
+  <g transform="translate(434 448)">
+    <rect width="160" height="34" rx="8" fill="#14171c" stroke="#262a31"/>
+    <circle cx="18" cy="17" r="4" fill="#ffae57"/><text x="32" y="22">live camera test</text>
+  </g>
+</g>
+
+<!-- phone -->
+<g transform="translate(-60 0)">
+<g filter="url(#shadow)">
+  <rect x="868" y="66" width="276" height="444" rx="38" fill="#1a1e24" stroke="#262a31" stroke-width="1.5"/>
+</g>
+<g clip-path="url(#screen)">
+  <rect x="880" y="78" width="252" height="420" fill="url(#photo)"/>
+  <!-- abstract scene -->
+  <path d="M880 380 C 950 340, 1030 360, 1132 330 L1132 498 L880 498Z" fill="#1f2a22"/>
+  <rect x="918" y="186" width="78" height="128" rx="12" fill="#101317" opacity="0.9"/>
+  <rect x="925" y="196" width="64" height="100" rx="6" fill="#14171c" opacity="0.8"/>
+  <ellipse cx="1074" cy="356" rx="34" ry="22" fill="#2b3a2a" stroke="#101317" stroke-opacity="0.4"/>
+  <path d="M1074 334 q 18 -40 4 -70" stroke="#2b3a2a" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <!-- top bar -->
+  <rect x="880" y="78" width="252" height="54" fill="#0b0d10" opacity="0.82"/>
+  <text x="900" y="110" font-family="Geist, 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#f4f5f7">image_2103</text>
+  <text x="1112" y="110" text-anchor="end" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#9aa0a9">12 / 50</text>
+  <!-- box 1 -->
+  <rect x="910" y="176" width="94" height="146" rx="3" fill="#c6f24e" fill-opacity="0.12" stroke="#c6f24e" stroke-width="2.5"/>
+  <rect x="910" y="156" width="64" height="20" rx="3" fill="#c6f24e"/>
+  <text x="918" y="170" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" fill="#1d2a06">phone</text>
+  <g fill="#14171c" stroke="#c6f24e" stroke-width="2">
+    <circle cx="910" cy="176" r="5"/><circle cx="1004" cy="176" r="5"/><circle cx="910" cy="322" r="5"/><circle cx="1004" cy="322" r="5"/>
+  </g>
+  <!-- box 2 -->
+  <rect x="1034" y="258" width="80" height="126" rx="3" fill="#ffae57" fill-opacity="0.12" stroke="#ffae57" stroke-width="2.5"/>
+  <rect x="1034" y="238" width="46" height="20" rx="3" fill="#ffae57"/>
+  <text x="1042" y="252" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="600" fill="#1d1206">leaf</text>
+  <!-- finger touch -->
+  <circle cx="1004" cy="322" r="20" fill="#f4f5f7" fill-opacity="0.10" stroke="#f4f5f7" stroke-opacity="0.35"/>
+  <!-- bottom bar -->
+  <rect x="880" y="430" width="252" height="68" fill="#0b0d10" opacity="0.88"/>
+  <rect x="896" y="446" width="104" height="36" rx="10" fill="#14171c" stroke="#262a31"/>
+  <text x="948" y="469" text-anchor="middle" font-family="Geist, 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#f4f5f7">2 boxes</text>
+  <rect x="1010" y="446" width="106" height="36" rx="10" fill="#c6f24e"/>
+  <text x="1063" y="469" text-anchor="middle" font-family="Geist, 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#1d2a06">Done, next</text>
+</g>
+<rect x="972" y="86" width="68" height="16" rx="8" fill="#0b0d10"/>
+</g>
+<!-- export card -->
+<g transform="translate(1030 140)" filter="url(#shadow)">
+  <rect width="214" height="250" rx="16" fill="#14171c" stroke="#262a31"/>
+  <text x="20" y="34" font-family="Geist, 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#f4f5f7">Phone.zip</text>
+  <text x="20" y="54" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#9aa0a9">ready for Ultralytics</text>
+  <line x1="20" y1="70" x2="194" y2="70" stroke="#262a31"/>
+  <g font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#f4f5f7">
+    <text x="20" y="96">data.yaml</text>
+    <text x="20" y="120" fill="#9aa0a9">images/</text>
+    <text x="36" y="140">train/ val/ test/</text>
+    <text x="20" y="166" fill="#9aa0a9">labels/</text>
+    <text x="36" y="186">image_2103.txt</text>
+    <rect x="20" y="202" width="150" height="26" rx="6" fill="#1a1e24"/>
+    <text x="30" y="219" font-size="11" fill="#c6f24e">0 0.42 0.53 0.25 0.29</text>
+  </g>
+</g>
+
+
+
+<!-- detection card -->
+<g transform="translate(712 334)" filter="url(#shadow)">
+  <rect width="150" height="86" rx="14" fill="#14171c" stroke="#262a31"/>
+  <text x="16" y="28" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#9aa0a9">live detection</text>
+  <circle cx="22" cy="52" r="5" fill="#c6f24e"/>
+  <text x="34" y="56" font-family="Geist, 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#f4f5f7">phone</text>
+  <text x="134" y="56" text-anchor="end" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" font-weight="600" fill="#f4f5f7">92%</text>
+  <rect x="16" y="66" width="118" height="5" rx="2.5" fill="#1a1e24"/>
+  <rect x="16" y="66" width="108" height="5" rx="2.5" fill="#c6f24e"/>
+</g>
+</svg>
